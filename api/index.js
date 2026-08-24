@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const { readState, updateState } = require('./store');
+const supabaseStore = require('./supabase_store');
+const businessStore = require('./business_store');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -12,6 +14,14 @@ let adviceEntries = initialState.adviceEntries;
 
 app.use(cors({ origin: '*' }));
 app.use(express.json());
+
+// Vercel peut transmettre le préfixe /api à Express après le rewrite.
+// On le retire pour que les routes Express restent identiques en local et en production.
+app.use((req, res, next) => {
+    if (req.url === '/api') req.url = '/';
+    else if (req.url.startsWith('/api/')) req.url = req.url.slice(4);
+    next();
+});
 
 // Health check
 app.get('/', (req, res) => {
@@ -25,31 +35,50 @@ app.get('/status', (req, res) => {
 // Synthèse LifeOS pour le dashboard principal
 app.get('/dashboard', async (req, res) => {
     const requestedDate = req.query.date;
-    const exportUrl = process.env.LIFEOS_EXPORT_URL || 'https://habit-track-xi.vercel.app/api/export?format=json-compact';
+    const exportUrl = process.env.LIFEOS_IA_URL || 'https://habit-track-xi.vercel.app/api/ia?scope=tout';
+        const isIaPayload = exportUrl.includes('/api/ia');
 
     try {
         const response = await fetch(exportUrl, { headers: { 'Accept': 'application/json' } });
         if (!response.ok) throw new Error(`LifeOS ${response.status}`);
         const payload = await response.json();
-        const days = Array.isArray(payload.recentDays) ? payload.recentDays : [];
-        const dated = days.filter(day => day && day.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-        const day = dated.find(item => item.date === requestedDate) || dated[0] || {};
-        const period = payload.period || {};
-        const averages = (payload.computedSummary || {}).averages7d || {};
+        const sourceDays = isIaPayload
+            ? ((payload.mois && payload.mois.jours) || (payload.semaine && payload.semaine.jours) || [])
+            : (Array.isArray(payload.recentDays) ? payload.recentDays : []);
+        const normalize = day => isIaPayload ? {
+            ...day,
+            sleepHours: day.sommeil,
+            sportMinutes: day.sportMin,
+            workMinutes: day.tafMin,
+            prospectingMinutes: day.businessMin,
+            prospectContacts: day.contacts,
+            newClients: day.clients,
+            moodScore: day.humeur,
+            energyScore: day.energie,
+            stressScore: day.stress,
+            performanceScore: day.score,
+        } : day;
+        const dated = sourceDays.filter(day => day && day.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+        const selected = dated.find(item => item.date === requestedDate) || dated[0] || {};
+        const day = normalize(selected);
+        const period = isIaPayload ? {
+            daysWithData: payload.mois?.joursNotes || dated.length,
+            daysWithSleep: dated.filter(item => item.sommeil !== null && item.sommeil !== undefined).length,
+            daysWithFeel: dated.filter(item => item.humeur !== null || item.energie !== null).length,
+        } : (payload.period || {});
+        const averages = isIaPayload ? {
+            sleepHours: payload.mois?.tuiles?.find(x => x.label === 'Sommeil')?.value || null,
+            performanceScore: payload.mois?.scoreMoyen ?? null,
+        } : ((payload.computedSummary || {}).averages7d || {});
 
         res.json({
             date: day.date || requestedDate || null,
             lifeos_day: day,
             targets: (payload.targets || {}).daily || {},
-            summary: {
-                daysWithData: period.daysWithData || dated.length,
-                daysWithSleep: period.daysWithSleep || 0,
-                daysWithFeel: period.daysWithFeel || 0,
-                averages7d: averages,
-            },
+            summary: { ...period, averages7d: averages },
             screen: { available: false, reason: 'Screen Time doit être connecté côté source de données.' },
             google: { email_count: 0, calendar_events_count: 0, available: false },
-            source: 'lifeos-api',
+            source: isIaPayload ? 'lifeos-ia-api' : 'lifeos-api',
         });
     } catch (error) {
         res.status(502).json({ error: 'Impossible de récupérer LifeOS', detail: error.message });
@@ -57,13 +86,18 @@ app.get('/dashboard', async (req, res) => {
 });
 
 // Journal libre : événements et informations non prévues par les métriques
-app.get('/journal', (req, res) => {
+app.get('/journal', async (req, res) => {
     const date = req.query.date;
     if (!date) return res.status(400).json({ error: 'Date requise' });
-    res.json({ entries: journalEntries.filter(entry => entry.date === date) });
+    try {
+        const remote = await supabaseStore.list(supabaseStore.TABLES.journal, { date, limit: 100 });
+        return res.json({ entries: remote || journalEntries.filter(entry => entry.date === date), source: remote ? 'supabase' : 'local' });
+    } catch (error) {
+        return res.status(502).json({ error: 'Lecture journal impossible', detail: error.message });
+    }
 });
 
-app.post('/journal', (req, res) => {
+app.post('/journal', async (req, res) => {
     const { date, text, category = 'libre', source = 'web' } = req.body || {};
     if (!date || !text || typeof text !== 'string' || !text.trim()) {
         return res.status(400).json({ error: 'Date et texte requis' });
@@ -76,24 +110,32 @@ app.post('/journal', (req, res) => {
         source,
         createdAt: new Date().toISOString()
     };
-    journalEntries.push(entry);
-    if (journalEntries.length > 1000) journalEntries.splice(0, journalEntries.length - 1000);
-    updateState(state => { state.meals = meals; state.journalEntries = journalEntries; });
-    res.status(201).json({ success: true, entry });
+    try {
+        const remote = await supabaseStore.saveJournal(entry);
+        if (remote) return res.status(201).json({ success: true, entry: remote, source: 'supabase' });
+        journalEntries.push(entry);
+        if (journalEntries.length > 1000) journalEntries.splice(0, journalEntries.length - 1000);
+        updateState(state => { state.meals = meals; state.journalEntries = journalEntries; });
+        return res.status(201).json({ success: true, entry, source: 'local' });
+    } catch (error) {
+        return res.status(502).json({ error: 'Enregistrement journal impossible', detail: error.message });
+    }
 });
 
 // Conseils entrepreneuriaux générés par Hermes
-app.get('/advice', (req, res) => {
+app.get('/advice', async (req, res) => {
     const date = req.query.date;
     const limit = Math.min(Number(req.query.limit) || 20, 100);
-    const entries = adviceEntries
-        .filter(entry => !date || entry.date === date)
-        .slice(-limit)
-        .reverse();
-    res.json({ entries });
+    try {
+        const remote = await supabaseStore.list(supabaseStore.TABLES.advice, { date, limit });
+        const entries = remote || adviceEntries.filter(entry => !date || entry.date === date).slice(-limit).reverse();
+        return res.json({ entries, source: remote ? 'supabase' : 'local' });
+    } catch (error) {
+        return res.status(502).json({ error: 'Lecture conseils impossible', detail: error.message });
+    }
 });
 
-app.post('/advice', (req, res) => {
+app.post('/advice', async (req, res) => {
     const { date, diagnosis, lever, action, domain = 'business', priority = 'normal', source = 'hermes' } = req.body || {};
     if (!date || !diagnosis || !action) {
         return res.status(400).json({ error: 'date, diagnosis et action sont requis' });
@@ -109,10 +151,69 @@ app.post('/advice', (req, res) => {
         source,
         createdAt: new Date().toISOString()
     };
-    adviceEntries.push(entry);
-    if (adviceEntries.length > 1000) adviceEntries.splice(0, adviceEntries.length - 1000);
-    updateState(state => { state.meals = meals; state.journalEntries = journalEntries; state.adviceEntries = adviceEntries; });
-    res.status(201).json({ success: true, entry });
+    try {
+        const remote = await supabaseStore.saveAdvice(entry);
+        if (remote) return res.status(201).json({ success: true, entry: remote, source: 'supabase' });
+        adviceEntries.push(entry);
+        if (adviceEntries.length > 1000) adviceEntries.splice(0, adviceEntries.length - 1000);
+        updateState(state => { state.meals = meals; state.journalEntries = journalEntries; state.adviceEntries = adviceEntries; });
+        return res.status(201).json({ success: true, entry, source: 'local' });
+    } catch (error) {
+        return res.status(502).json({ error: 'Enregistrement conseil impossible', detail: error.message });
+    }
+});
+
+// Business OS : source persistante unique (Supabase si configuré, local sinon).
+app.get('/business/state', async (req, res) => {
+    try {
+        const [contacts, processes, settings] = await Promise.all([
+            businessStore.list(businessStore.TABLES.contacts),
+            businessStore.list(businessStore.TABLES.processes),
+            businessStore.list(businessStore.TABLES.settings)
+        ]);
+        if (contacts || processes || settings) {
+            return res.json({
+                source: 'supabase',
+                contacts: contacts || [],
+                processes: processes || [],
+                settings: settings?.[0] || null
+            });
+        }
+        return res.json({ source: 'local', contacts: [], processes: [], settings: null });
+    } catch (error) {
+        return res.status(502).json({ error: 'Lecture Business OS impossible', detail: error.message });
+    }
+});
+
+app.post('/business/contact', async (req, res) => {
+    const { name, status = 'prospect', value = 0, nextAction = '', nextActionAt = null, note = '', source = 'web' } = req.body || {};
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'Nom requis' });
+    if (!['prospect', 'rdv', 'proposition', 'client', 'perdu'].includes(status)) return res.status(400).json({ error: 'Statut invalide' });
+    const row = { name: String(name).trim().slice(0, 200), status, value: Number(value) || 0, next_action: String(nextAction).trim().slice(0, 500), next_action_at: nextActionAt || null, note: String(note).trim().slice(0, 5000), source };
+    try {
+        const remote = await businessStore.insert(businessStore.TABLES.contacts, row);
+        if (remote) return res.status(201).json({ success: true, source: 'supabase', contact: remote });
+        return res.status(201).json({ success: true, source: 'local', contact: row });
+    } catch (error) { return res.status(502).json({ error: 'Enregistrement contact impossible', detail: error.message }); }
+});
+
+app.post('/business/process', async (req, res) => {
+    const { title, description = '', status = 'brouillon', source = 'web' } = req.body || {};
+    if (!title || !String(title).trim()) return res.status(400).json({ error: 'Titre requis' });
+    try {
+        const remote = await businessStore.insert(businessStore.TABLES.processes, { title: String(title).trim().slice(0, 200), description: String(description).trim().slice(0, 10000), status, source });
+        if (remote) return res.status(201).json({ success: true, source: 'supabase', process: remote });
+        return res.status(201).json({ success: true, source: 'local', process: { title, description, status, source } });
+    } catch (error) { return res.status(502).json({ error: 'Enregistrement process impossible', detail: error.message }); }
+});
+
+app.put('/business/settings', async (req, res) => {
+    const { revenueTarget = 10000, savingsTarget = 2000, savings = 0 } = req.body || {};
+    try {
+        const remote = await businessStore.upsert(businessStore.TABLES.settings, { id: true, revenue_target: Number(revenueTarget) || 0, savings_target: Number(savingsTarget) || 0, savings: Number(savings) || 0 });
+        if (remote) return res.json({ success: true, source: 'supabase', settings: remote });
+        return res.json({ success: true, source: 'local', settings: { revenueTarget, savingsTarget, savings } });
+    } catch (error) { return res.status(502).json({ error: 'Enregistrement objectifs impossible', detail: error.message }); }
 });
 
 // Get today's meals
@@ -292,8 +393,12 @@ app.get('/stats/month', (req, res) => {
     res.json({ protein: protein.toFixed(1), carbs: carbs.toFixed(1), calories: calories.toFixed(0), count });
 });
 
-app.listen(port, () => {
-    console.log(`📡 Life Tracker API running on port ${port}`);
-});
+// En local, le fichier reste exécutable avec `node api/index.js`.
+// Sur Vercel, l'application est exportée comme fonction serverless.
+if (require.main === module) {
+    app.listen(port, () => {
+        console.log(`📡 Life Tracker API running on port ${port}`);
+    });
+}
 
 module.exports = app;

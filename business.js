@@ -1,7 +1,37 @@
 (() => {
   const storeKey = 'lifeos-business-v1';
-  const state = JSON.parse(localStorage.getItem(storeKey) || '{"revenue":0,"savings":0,"prospects":[],"clients":[],"processes":[],"journal":[]}');
+  const defaultState = { revenue: 0, savings: 0, prospects: [], clients: [], processes: [], journal: [], settings: { revenueTarget: 10000, savingsTarget: 2000 } };
+  const state = JSON.parse(localStorage.getItem(storeKey) || JSON.stringify(defaultState));
   const $ = (id) => document.getElementById(id);
+  const api = (path, options) => fetch(`/api${path}`, { cache: 'no-store', ...options });
+
+  async function loadBusinessState() {
+    try {
+      const response = await api('/business/state');
+      if (!response.ok) throw new Error(`API ${response.status}`);
+      const remote = await response.json();
+      if (remote.source !== 'supabase') return;
+      state.clients = (remote.contacts || []).map(item => ({
+        ...item,
+        value: item.value ?? 0,
+        nextAction: item.next_action ?? item.nextAction ?? '',
+        note: item.note ?? ''
+      }));
+      state.prospects = [];
+      state.processes = remote.processes || [];
+      if (remote.settings) {
+        state.settings = {
+          revenueTarget: Number(remote.settings.revenue_target ?? 10000),
+          savingsTarget: Number(remote.settings.savings_target ?? 2000)
+        };
+        state.savings = Number(remote.settings.savings ?? 0);
+      }
+      localStorage.setItem(storeKey, JSON.stringify(state));
+      render();
+    } catch (error) {
+      console.warn('Business OS : mode local.', error);
+    }
+  }
   const save = () => { localStorage.setItem(storeKey, JSON.stringify(state)); $('last-update').textContent = new Date().toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); };
   const esc = (v) => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 
@@ -20,32 +50,84 @@
   }
 
   function render() {
+    const settings = state.settings || { revenueTarget: 10000, savingsTarget: 2000 };
+    const prospects = state.prospects || [];
+    const clients = state.clients || [];
+    const active = [...prospects, ...clients].filter(x => x.status !== 'perdu');
+    const signed = [...clients, ...prospects].filter(x => x.status === 'client');
+    const opportunities = active.filter(x => x.status === 'rdv' || x.status === 'proposition' || x.status === 'prospect');
+    const pipeline = active.reduce((sum, item) => sum + Number(item.value || 0), 0);
     $('revenue-value').textContent = Number(state.revenue || 0).toLocaleString('fr-FR');
+    $('revenue-target-label').textContent = `${Number(settings.revenueTarget).toLocaleString('fr-FR')} €`;
+    $('savings-target-label').textContent = `${Number(settings.savingsTarget).toLocaleString('fr-FR')} €`;
+    $('pipeline-value').textContent = pipeline.toLocaleString('fr-FR');
+    $('funnel-prospects').textContent = prospects.filter(x => x.status === 'prospect').length;
+    $('funnel-opportunities').textContent = opportunities.length;
+    $('funnel-clients').textContent = signed.length;
+    const conversion = prospects.length ? Math.round(signed.length / prospects.length * 100) : null;
+    $('conversion-rate').textContent = conversion === null ? '—' : `${conversion}%`;
+    const signedValues = signed.map(x => Number(x.value || 0)).filter(x => x > 0);
+    $('average-deal').textContent = signedValues.length ? `${Math.round(signedValues.reduce((a,b) => a+b, 0) / signedValues.length).toLocaleString('fr-FR')} €` : '—';
+    if ($('prospects-value')) $('prospects-value').textContent = prospects.length;
+    if ($('clients-value')) $('clients-value').textContent = clients.length;
     loadAdvice();
     
-    $('prospects-value').textContent = state.prospects.length;
-    $('clients-value').textContent = state.clients.length;
     $('value-clients').textContent = state.clients.filter(x => x.status === 'client').length;
     $('value-processes').textContent = state.processes.length;
     $('value-notes').textContent = state.journal.length;
-    $('savings-label').textContent = `${Number(state.savings || 0).toLocaleString('fr-FR')} / 2 000 €`;
-    $('savings-progress').style.width = `${Math.min(100, Number(state.savings || 0) / 20)}%`;
-    $('revenue-bar').style.width = `${Math.min(100, Number(state.revenue || 0) / 100)}%`;
-    $('prospects-bar').style.width = `${Math.min(100, state.prospects.length * 10)}%`;
-    $('clients-bar').style.width = `${Math.min(100, state.clients.length * 20)}%`;
+    $('savings-value').textContent = Number(state.savings || 0).toLocaleString('fr-FR');
+    $('savings-label').textContent = `${Number(state.savings || 0).toLocaleString('fr-FR')} / ${Number(settings.savingsTarget).toLocaleString('fr-FR')} €`;
+    $('savings-progress').style.width = `${Math.min(100, Number(state.savings || 0) / Number(settings.savingsTarget) * 100)}%`;
+    $('savings-bar').style.width = `${Math.min(100, Number(state.savings || 0) / Number(settings.savingsTarget) * 100)}%`;
+    $('revenue-bar').style.width = `${Math.min(100, Number(state.revenue || 0) / Number(settings.revenueTarget) * 100)}%`;
+    $('pipeline-bar').style.width = `${Math.min(100, pipeline / Number(settings.revenueTarget) * 100)}%`;
+    $('prospects-bar').style.width = `${Math.min(100, prospects.length * 10)}%`;
+    $('clients-bar').style.width = `${Math.min(100, clients.length * 20)}%`;
+    const next = active.find(x => x.nextAction);
+    if (next) { $('next-action-title').textContent = next.nextAction; $('next-action-copy').textContent = `${next.name} · ${next.status}`; }
     renderList('clients-list', state.clients, 'Aucun client ou prospect enregistré.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.name)}</div><div class="entry-meta">${esc(x.note || '')}</div></div><span class="entry-tag">${esc(x.status)}</span></div>`);
     renderList('process-list', state.processes, 'Aucun process documenté.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.title)}</div><div class="entry-meta">${esc(x.description || '')}</div></div><span class="entry-tag">process</span></div>`);
     renderList('journal-list', state.journal, 'Aucune note dans le journal.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.title)}</div><div class="entry-meta">${esc(x.body)}</div></div><span class="entry-tag">${esc(x.date)}</span></div>`);
   }
   function renderList(id, items, empty, template) { const el=$(id); el.innerHTML=items.length ? items.slice().reverse().map(template).join('') : `<div class="blank-state"><span>—</span><strong>${empty}</strong><p>Utilise le bouton « + Ajouter » pour commencer à construire ta mémoire opérationnelle.</p></div>`; }
   function fields(type) {
-    if(type==='client') return `<div class="field"><label>Nom / entreprise</label><input name="name" required placeholder="Ex. Premier client"></div><div class="field"><label>Statut</label><select name="status"><option>prospect</option><option>client</option><option>perdu</option></select></div><div class="field"><label>Note</label><textarea name="note" placeholder="Besoin, offre, prochaine action..."></textarea></div>`;
+    if(type==='client') return `<div class="field"><label>Nom / entreprise</label><input name="name" required placeholder="Ex. Premier client"></div><div class="field"><label>Statut</label><select name="status"><option>prospect</option><option>rdv</option><option>proposition</option><option>client</option><option>perdu</option></select></div><div class="field"><label>Valeur potentielle (€)</label><input name="value" type="number" min="0" placeholder="Ex. 600"></div><div class="field"><label>Prochaine action / échéance</label><input name="nextAction" placeholder="Ex. Relancer vendredi"></div><div class="field"><label>Note</label><textarea name="note" placeholder="Besoin, offre, contexte..."></textarea></div>`;
+    if(type==='settings') return `<div class="field"><label>Objectif CA mensuel (€)</label><input name="revenueTarget" type="number" min="0" value="${state.settings?.revenueTarget || 10000}" required></div><div class="field"><label>Objectif épargne (€)</label><input name="savingsTarget" type="number" min="0" value="${state.settings?.savingsTarget || 2000}" required></div><div class="field"><label>Épargne actuelle (€)</label><input name="savings" type="number" min="0" value="${state.savings || 0}" required></div>`
     if(type==='process') return `<div class="field"><label>Nom du process</label><input name="title" required placeholder="Ex. Onboarding client"></div><div class="field"><label>Étapes / description</label><textarea name="description" required placeholder="1. ...&#10;2. ...&#10;3. ..."></textarea></div>`;
     return `<div class="field"><label>Titre</label><input name="title" required placeholder="Décision, apprentissage ou erreur"></div><div class="field"><label>Contenu</label><textarea name="body" required placeholder="Ce qui s'est passé, ce que j'ai appris, ce que je change..."></textarea></div>`;
   }
   let activeType;
-  document.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => { activeType=btn.dataset.open.replace('-form',''); $('dialog-title').textContent=activeType==='client'?'Nouveau contact':activeType==='process'?'Nouveau process':'Nouvelle note'; $('dialog-fields').innerHTML=fields(activeType); $('entry-dialog').showModal(); }));
-  $('entry-form').addEventListener('submit', e => { e.preventDefault(); const data=Object.fromEntries(new FormData(e.target)); if(activeType==='client') { state.clients.push(data); if(data.status==='client') state.revenue = Number(state.revenue || 0); } if(activeType==='process') state.processes.push(data); if(activeType==='journal') state.journal.push({...data,date:new Date().toLocaleDateString('fr-FR')}); save(); render(); $('entry-dialog').close(); e.target.reset(); });
+  document.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => { activeType=btn.dataset.open.replace('-form',''); $('dialog-title').textContent=activeType==='client'?'Nouveau contact':activeType==='process'?'Nouveau process':activeType==='settings'?'Objectifs Business':'Nouvelle note'; $('dialog-fields').innerHTML=fields(activeType); $('entry-dialog').showModal(); }));
+  $('entry-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.target));
+    try {
+      if (activeType === 'settings') {
+        const response = await api('/business/settings', { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ revenueTarget: Number(data.revenueTarget), savingsTarget: Number(data.savingsTarget), savings: Number(data.savings) }) });
+        if (!response.ok) throw new Error(`API ${response.status}`);
+        state.settings = { revenueTarget: Number(data.revenueTarget), savingsTarget: Number(data.savingsTarget) };
+        state.savings = Number(data.savings);
+      }
+      if (activeType === 'client') {
+        const response = await api('/business/contact', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: data.name, status: data.status, value: Number(data.value || 0), nextAction: data.nextAction, note: data.note, source: 'web' }) });
+        if (!response.ok) throw new Error(`API ${response.status}`);
+        const result = await response.json();
+        state.clients.push(result.contact || data);
+      }
+      if (activeType === 'process') {
+        const response = await api('/business/process', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ title: data.title, description: data.description, source: 'web' }) });
+        if (!response.ok) throw new Error(`API ${response.status}`);
+        const result = await response.json();
+        state.processes.push(result.process || data);
+      }
+      if (activeType === 'journal') state.journal.push({...data, date: new Date().toLocaleDateString('fr-FR')});
+      save(); render(); $('entry-dialog').close(); e.target.reset();
+    } catch (error) {
+      console.error('Enregistrement Business OS impossible.', error);
+      alert('Impossible de synchroniser cette entrée. Vérifie la connexion puis réessaie.');
+    }
+  });
+  loadBusinessState();
   $('export-button').addEventListener('click', () => { const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`lifeos-business-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(a.href); });
   render();
 })();
