@@ -3,8 +3,9 @@ function number(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function computeBusinessMetrics(contacts = []) {
+function computeBusinessMetrics(contacts = [], now = new Date()) {
   const active = contacts.filter(item => item.status !== 'perdu');
+  const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
   const prospects = contacts.filter(item => item.status === 'prospect');
   const opportunities = contacts.filter(item => ['rdv', 'proposition'].includes(item.status));
   const clients = contacts.filter(item => item.status === 'client');
@@ -12,10 +13,13 @@ function computeBusinessMetrics(contacts = []) {
     .filter(item => item.status !== 'client')
     .reduce((sum, item) => sum + number(item.value), 0);
   const signedValue = clients.reduce((sum, item) => sum + number(item.value), 0);
+  const signedValueMonth = clients
+    .filter(item => String(item.created_at || item.createdAt || '').slice(0, 7) === monthKey)
+    .reduce((sum, item) => sum + number(item.value), 0);
   const averageDeal = clients.length ? signedValue / clients.length : null;
   const knownOutcomes = clients.length + contacts.filter(item => item.status === 'perdu').length;
   const conversionRate = knownOutcomes ? clients.length / knownOutcomes * 100 : null;
-  return { prospects: prospects.length, opportunities: opportunities.length, clients: clients.length, pipeline, signedValue, averageDeal, conversionRate };
+  return { prospects: prospects.length, opportunities: opportunities.length, clients: clients.length, pipeline, signedValue, signedValueMonth, averageDeal, conversionRate };
 }
 
 function buildLifeTrends(days = [], limit = 30) {

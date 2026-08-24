@@ -6,10 +6,12 @@ const TABLES = {
   meals: 'meal_entries'
 };
 
-async function list(table, { date, limit = 100 } = {}) {
+async function list(table, { date, from, to, limit = 100 } = {}) {
   if (!isConfigured()) return null;
   let query = client().from(table).select('*').order('created_at', { ascending: false }).limit(limit);
   if (date) query = query.eq('date', date);
+  if (from) query = query.gte('date', from);
+  if (to) query = query.lte('date', to);
   const { data, error } = await query;
   if (error) throw error;
   return data || [];

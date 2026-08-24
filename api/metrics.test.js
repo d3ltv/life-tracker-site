@@ -14,6 +14,15 @@ test('le pipeline exclut les clients déjà signés', () => {
   assert.equal(result.clients, 1);
 });
 
+test('la valeur mensuelle ne compte que les clients enregistrés dans le mois', () => {
+  const result = computeBusinessMetrics([
+    { status: 'client', value: 1000, created_at: '2026-08-12T10:00:00Z' },
+    { status: 'client', value: 800, created_at: '2026-07-30T10:00:00Z' }
+  ], new Date('2026-08-24T12:00:00Z'));
+  assert.equal(result.signedValue, 1800);
+  assert.equal(result.signedValueMonth, 1000);
+});
+
 test('la conversion utilise uniquement les résultats connus', () => {
   const result = computeBusinessMetrics([
     { status: 'prospect' },

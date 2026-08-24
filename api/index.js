@@ -6,6 +6,13 @@ const businessStore = require('./business_store');
 const { computeBusinessMetrics, buildLifeTrends, aggregateMeals } = require('./metrics');
 const app = express();
 const port = process.env.PORT || 3000;
+const publicOrigin = process.env.PUBLIC_ORIGIN || 'https://life-tracker-site.vercel.app';
+const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+
+function safeError(res, status, message, error) {
+    console.error(message, error);
+    return res.status(status).json({ error: message });
+}
 
 // Stockage persistant local pour le développement.
 const initialState = readState();
@@ -13,7 +20,10 @@ let meals = initialState.meals;
 let journalEntries = initialState.journalEntries;
 let adviceEntries = initialState.adviceEntries;
 
-app.use(cors({ origin: '*' }));
+app.use(cors({ origin(origin, callback) {
+    if (!origin || origin === publicOrigin || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
+    return callback(new Error('Origin refusée'));
+} }));
 app.use(express.json());
 
 // Vercel peut transmettre le préfixe /api à Express après le rewrite.
@@ -99,14 +109,14 @@ app.get('/journal', async (req, res) => {
             .reverse();
         return res.json({ entries: remote || localEntries, source: remote ? 'supabase' : 'local' });
     } catch (error) {
-        return res.status(502).json({ error: 'Lecture journal impossible', detail: error.message });
+        return safeError(res, 502, 'Lecture journal impossible', error);
     }
 });
 
 app.post('/journal', async (req, res) => {
     const { date, text, category = 'libre', source = 'web' } = req.body || {};
-    if (!date || !text || typeof text !== 'string' || !text.trim()) {
-        return res.status(400).json({ error: 'Date et texte requis' });
+    if (!isoDate.test(String(date || '')) || !text || typeof text !== 'string' || !text.trim()) {
+        return res.status(400).json({ error: 'Date ISO et texte requis' });
     }
     const entry = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -124,7 +134,7 @@ app.post('/journal', async (req, res) => {
         updateState(state => { state.meals = meals; state.journalEntries = journalEntries; });
         return res.status(201).json({ success: true, entry, source: 'local' });
     } catch (error) {
-        return res.status(502).json({ error: 'Enregistrement journal impossible', detail: error.message });
+        return safeError(res, 502, 'Enregistrement journal impossible', error);
     }
 });
 
@@ -252,11 +262,9 @@ app.get('/stats/today', async (req, res) => {
 
 // Post a meal (receives from Telegram webhook or direct POST)
 app.post('/meal', async (req, res) => {
-    const meal = req.body;
-    
-    // Validate required fields
-    if (!meal.date || !meal.meal_type || !meal.quality) {
-        return res.status(400).json({ error: 'Champs requis manquants' });
+    const meal = req.body || {};
+    if (!isoDate.test(String(meal.date || '')) || !meal.meal_type || !meal.quality) {
+        return res.status(400).json({ error: 'Date ISO, type et qualité requis' });
     }
     
     // Ensure protein/carbs are numbers
@@ -286,8 +294,9 @@ app.post('/telegram-webhook', async (req, res) => {
     }
     
     const message = update.message;
-    const chatId = message.chat.id;
-    const text = message.text;
+    const chatId = message.chat?.id;
+    const text = typeof message.text === 'string' ? message.text : '';
+    if (!chatId || !text) return res.status(200).json({ ok: true });
     
     // Parse commands from user
     if (text.startsWith('/track')) {
@@ -354,53 +363,40 @@ app.post('/telegram-webhook', async (req, res) => {
 });
 
 // Get aggregated stats (week, month)
-app.get('/stats/week', (req, res) => {
+app.get('/stats/week', async (req, res) => {
     const date = req.query.date;
-    if (!date) return res.status(400).json({ error: 'Date requise' });
-    
-    const targetDate = new Date(date);
+    if (!isoDate.test(String(date || ''))) return res.status(400).json({ error: 'Date ISO requise' });
+    const targetDate = new Date(`${date}T12:00:00Z`);
     const startOfWeek = new Date(targetDate);
-    startOfWeek.setDate(targetDate.getDate() - targetDate.getDay());
-    startOfWeek.setHours(0, 0, 0, 0);
-    
+    const mondayOffset = (targetDate.getUTCDay() + 6) % 7;
+    startOfWeek.setUTCDate(targetDate.getUTCDate() - mondayOffset);
     const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
-    endOfWeek.setHours(23, 59, 59, 999);
-    
-    const weekMeals = meals.filter(m => {
-        const mDate = new Date(m.date);
-        return mDate >= startOfWeek && mDate <= endOfWeek;
-    });
-    
-    const protein = weekMeals.reduce((sum, m) => sum + (m.protein_g || 0), 0);
-    const carbs = weekMeals.reduce((sum, m) => sum + (m.carbs_g || 0), 0);
-    const calories = weekMeals.reduce((sum, m) => sum + (m.calories || 0), 0);
-    const count = weekMeals.length;
-    
-    res.json({ protein: protein.toFixed(1), carbs: carbs.toFixed(1), calories: calories.toFixed(0), count });
+    endOfWeek.setUTCDate(startOfWeek.getUTCDate() + 6);
+    const from = startOfWeek.toISOString().slice(0, 10);
+    const to = endOfWeek.toISOString().slice(0, 10);
+    try {
+        const remote = await supabaseStore.list(supabaseStore.TABLES.meals, { from, to, limit: 500 });
+        const sourceMeals = remote || meals.filter(meal => meal.date >= from && meal.date <= to);
+        const totals = aggregateMeals(sourceMeals);
+        return res.json({ ...totals, source: remote ? 'supabase' : 'local', from, to });
+    } catch (error) { return safeError(res, 502, 'Statistiques hebdomadaires impossibles', error); }
 });
 
 // Get aggregated stats (month)
-app.get('/stats/month', (req, res) => {
+app.get('/stats/month', async (req, res) => {
     const date = req.query.date;
-    if (!date) return res.status(400).json({ error: 'Date requise' });
-    
-    const targetDate = new Date(date);
-    const startOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
-    const endOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
-    endOfMonth.setHours(23, 59, 59, 999);
-    
-    const monthMeals = meals.filter(m => {
-        const mDate = new Date(m.date);
-        return mDate >= startOfMonth && mDate <= endOfMonth;
-    });
-    
-    const protein = monthMeals.reduce((sum, m) => sum + (m.protein_g || 0), 0);
-    const carbs = monthMeals.reduce((sum, m) => sum + (m.carbs_g || 0), 0);
-    const calories = monthMeals.reduce((sum, m) => sum + (m.calories || 0), 0);
-    const count = monthMeals.length;
-    
-    res.json({ protein: protein.toFixed(1), carbs: carbs.toFixed(1), calories: calories.toFixed(0), count });
+    if (!isoDate.test(String(date || ''))) return res.status(400).json({ error: 'Date ISO requise' });
+    const monthKey = date.slice(0, 7);
+    const from = `${monthKey}-01`;
+    const year = Number(monthKey.slice(0, 4));
+    const month = Number(monthKey.slice(5, 7));
+    const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    try {
+        const remote = await supabaseStore.list(supabaseStore.TABLES.meals, { from, to, limit: 1000 });
+        const sourceMeals = remote || meals.filter(meal => meal.date >= from && meal.date <= to);
+        const totals = aggregateMeals(sourceMeals);
+        return res.json({ ...totals, source: remote ? 'supabase' : 'local', from, to });
+    } catch (error) { return safeError(res, 502, 'Statistiques mensuelles impossibles', error); }
 });
 
 // En local, le fichier reste exécutable avec `node api/index.js`.

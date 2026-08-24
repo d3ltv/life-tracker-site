@@ -71,7 +71,7 @@
       state.prospects = [];
       state.processes = remote.processes || [];
       if (remote.metrics) {
-        state.revenue = Number(remote.metrics.signedValue || 0);
+        state.revenue = Number(remote.metrics.signedValueMonth || 0);
       }
       if (remote.settings) {
         state.settings = {
@@ -137,7 +137,9 @@
     $('funnel-prospects').textContent = prospects.filter(x => x.status === 'prospect').length;
     $('funnel-opportunities').textContent = opportunities.length;
     $('funnel-clients').textContent = signed.length;
-    const conversion = prospects.length ? Math.round(signed.length / prospects.length * 100) : null;
+    const lost = contacts.filter(x => x.status === 'perdu');
+    const knownOutcomes = signed.length + lost.length;
+    const conversion = knownOutcomes ? Math.round(signed.length / knownOutcomes * 100) : null;
     $('conversion-rate').textContent = conversion === null ? '—' : `${conversion}%`;
     const signedValues = signed.map(x => Number(x.value || 0)).filter(x => x > 0);
     $('average-deal').textContent = signedValues.length ? `${Math.round(signedValues.reduce((a,b) => a+b, 0) / signedValues.length).toLocaleString('fr-FR')} €` : '—';
@@ -161,9 +163,9 @@
     if (next) { $('next-action-title').textContent = next.nextAction; $('next-action-copy').textContent = `${next.name} · ${next.status}`; }
     renderList('clients-list', state.clients, 'Aucun client ou prospect enregistré.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.name)}</div><div class="entry-meta">${esc(x.note || '')}</div></div><span class="entry-tag">${esc(x.status)}</span></div>`);
     renderList('process-list', state.processes, 'Aucun process documenté.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.title)}</div><div class="entry-meta">${esc(x.description || '')}</div></div><span class="entry-tag">process</span></div>`);
-    renderList('journal-list', state.journal, 'Aucune note dans le journal.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.title)}</div><div class="entry-meta">${esc(x.body)}</div></div><span class="entry-tag">${esc(x.date)}</span></div>`);
+    renderList('journal-list', state.journal, 'Aucune note dans le journal.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.title)}</div><div class="entry-meta">${esc(x.body)}</div></div><span class="entry-tag">${esc(x.date)}</span></div>`, false);
   }
-  function renderList(id, items, empty, template) { const el=$(id); el.innerHTML=items.length ? items.slice().reverse().map(template).join('') : `<div class="blank-state"><span>—</span><strong>${empty}</strong><p>Utilise le bouton « + Ajouter » pour commencer à construire ta mémoire opérationnelle.</p></div>`; }
+  function renderList(id, items, empty, template, reverse = true) { const el=$(id); const ordered=reverse ? items.slice().reverse() : items.slice(); el.innerHTML=ordered.length ? ordered.map(template).join('') : `<div class="blank-state"><span>—</span><strong>${empty}</strong><p>Utilise le bouton « + Ajouter » pour commencer à construire ta mémoire opérationnelle.</p></div>`; }
   function fields(type) {
     if(type==='client') return `<div class="field"><label>Nom / entreprise</label><input name="name" required placeholder="Ex. Premier client"></div><div class="field"><label>Statut</label><select name="status"><option>prospect</option><option>rdv</option><option>proposition</option><option>client</option><option>perdu</option></select></div><div class="field"><label>Valeur potentielle (€)</label><input name="value" type="number" min="0" placeholder="Ex. 600"></div><div class="field"><label>Prochaine action / échéance</label><input name="nextAction" placeholder="Ex. Relancer vendredi"></div><div class="field"><label>Note</label><textarea name="note" placeholder="Besoin, offre, contexte..."></textarea></div>`;
     if(type==='settings') return `<div class="field"><label>Objectif CA mensuel (€)</label><input name="revenueTarget" type="number" min="0" value="${state.settings?.revenueTarget || 10000}" required></div><div class="field"><label>Objectif épargne (€)</label><input name="savingsTarget" type="number" min="0" value="${state.settings?.savingsTarget || 2000}" required></div><div class="field"><label>Épargne actuelle (€)</label><input name="savings" type="number" min="0" value="${state.savings || 0}" required></div>`
@@ -195,7 +197,7 @@
         state.processes.push(result.process || data);
       }
       if (activeType === 'journal') {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
         const response = await api('/journal', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ date: today, text: data.body, category: data.title, source: 'business-web' }) });
         if (!response.ok) throw new Error(`API ${response.status}`);
         await loadJournal();
