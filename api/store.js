@@ -5,7 +5,7 @@ const dataDirectory = path.join(__dirname, 'data');
 const dataFile = path.join(dataDirectory, 'lifeos.json');
 
 function emptyState() {
-  return { meals: [], journalEntries: [], adviceEntries: [] };
+  return { meals: [], journalEntries: [], adviceEntries: [], lifeosDays: {} };
 }
 
 function readState() {
@@ -15,7 +15,8 @@ function readState() {
     return {
       meals: Array.isArray(parsed.meals) ? parsed.meals : [],
       journalEntries: Array.isArray(parsed.journalEntries) ? parsed.journalEntries : [],
-      adviceEntries: Array.isArray(parsed.adviceEntries) ? parsed.adviceEntries : []
+      adviceEntries: Array.isArray(parsed.adviceEntries) ? parsed.adviceEntries : [],
+      lifeosDays: parsed.lifeosDays && typeof parsed.lifeosDays === 'object' ? parsed.lifeosDays : {}
     };
   } catch (error) {
     console.error('Impossible de lire le stockage LifeOS:', error.message);

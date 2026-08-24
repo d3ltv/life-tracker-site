@@ -128,6 +128,9 @@
   }
   $('refresh-button')?.addEventListener('click', refresh);
   refresh();
-  window.setInterval(refresh, 30000);
+  window.setInterval(refresh, 8000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refresh();
+  });
 })();
       

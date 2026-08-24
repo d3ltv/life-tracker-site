@@ -8,6 +8,8 @@ const supabaseStore = require('./supabase_store');
 const businessStore = require('./business_store');
 const { computeBusinessMetrics, buildLifeTrends, aggregateMeals } = require('./metrics');
 const integrationStore = require('./integration_store');
+const { pickLifeosDay, normalizeIaDay } = require('./lifeos_sync');
+const lifeosDayStore = require('./lifeos_day_store');
 const app = express();
 const port = process.env.PORT || 3000;
 const publicOrigin = process.env.PUBLIC_ORIGIN || 'https://life-tracker-site.vercel.app';
@@ -106,28 +108,21 @@ function normalizeMeal(body = {}) {
 async function loadLifeosBriefing(requestedDate) {
     const exportUrl = process.env.LIFEOS_IA_URL || 'https://habit-track-xi.vercel.app/api/ia?scope=tout';
     const isIaPayload = exportUrl.includes('/api/ia');
-    const response = await fetch(exportUrl, { headers: { Accept: 'application/json' } });
-    if (!response.ok) throw new Error(`LifeOS ${response.status}`);
+    const ingested = await lifeosDayStore.read(requestedDate).catch(() => null);
+    const response = await fetch(exportUrl, { headers: { Accept: 'application/json', 'Cache-Control': 'no-store' } });
+    if (!response.ok) {
+        if (ingested) return { day: normalizeIaDay(ingested), source: 'lifeos-push' };
+        throw new Error(`LifeOS ${response.status}`);
+    }
     const payload = await response.json();
-    const sourceDays = isIaPayload
-        ? ((payload.mois && payload.mois.jours) || (payload.semaine && payload.semaine.jours) || [])
-        : (Array.isArray(payload.recentDays) ? payload.recentDays : []);
-    const normalize = day => isIaPayload ? {
-        date: day.date,
-        sleepHours: day.sommeil,
-        sportMinutes: day.sportMin,
-        workMinutes: day.tafMin,
-        prospectingMinutes: day.businessMin,
-        prospectContacts: day.contacts,
-        newClients: day.clients,
-        moodScore: day.humeur,
-        energyScore: day.energie,
-        stressScore: day.stress,
-        performanceScore: day.score,
-    } : day;
+    if (isIaPayload) {
+        const { day } = pickLifeosDay(payload, requestedDate, ingested);
+        return { day, source: ingested ? 'lifeos-push' : 'lifeos-ia-api' };
+    }
+    const sourceDays = Array.isArray(payload.recentDays) ? payload.recentDays : [];
     const dated = sourceDays.filter(day => day && day.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-    const selected = dated.find(item => item.date === requestedDate) || dated[0] || {};
-    return { day: normalize(selected), source: isIaPayload ? 'lifeos-ia-api' : 'lifeos-api' };
+    const selected = dated.find(item => item.date === requestedDate) || ingested || dated[0] || {};
+    return { day: normalizeIaDay(selected), source: ingested ? 'lifeos-push' : 'lifeos-api' };
 }
 
 // Briefing unique pour Hermes : tout ce que l'agent doit lire avant de parler ou d'écrire.
@@ -221,42 +216,45 @@ app.get('/integrations/latest', async (req, res) => {
     } catch (error) { return safeError(res, 502, 'Lecture des intégrations impossible', error); }
 });
 
+app.post('/lifeos/ingest', async (req, res) => {
+    if (!hasSyncAccess(req)) return res.status(401).json({ error: 'Non autorisé' });
+    const day = req.body?.day && typeof req.body.day === 'object' ? req.body.day : req.body;
+    if (!day?.date || !isoDate.test(String(day.date))) return res.status(400).json({ error: 'Jour invalide' });
+    try {
+        const saved = await lifeosDayStore.save(day);
+        return res.json({ success: true, date: saved.date || day.date });
+    } catch (error) {
+        return safeError(res, 400, 'Ingest LifeOS impossible', error);
+    }
+});
+
 // Synthèse LifeOS pour le dashboard principal
 app.get('/dashboard', async (req, res) => {
-    const requestedDate = req.query.date;
+    const requestedDate = String(req.query.date || todayInParis());
     const exportUrl = process.env.LIFEOS_IA_URL || 'https://habit-track-xi.vercel.app/api/ia?scope=tout';
-        const isIaPayload = exportUrl.includes('/api/ia');
+    const isIaPayload = exportUrl.includes('/api/ia');
 
     try {
-        const response = await fetch(exportUrl, { headers: { 'Accept': 'application/json' } });
+        const ingested = await lifeosDayStore.read(requestedDate).catch(() => null);
+        const response = await fetch(exportUrl, { headers: { 'Accept': 'application/json', 'Cache-Control': 'no-store' } });
         if (!response.ok) throw new Error(`LifeOS ${response.status}`);
         const payload = await response.json();
-        const sourceDays = isIaPayload
-            ? ((payload.mois && payload.mois.jours) || (payload.semaine && payload.semaine.jours) || [])
-            : (Array.isArray(payload.recentDays) ? payload.recentDays : []);
-        const normalize = day => isIaPayload ? {
-            ...day,
-            sleepHours: day.sommeil,
-            sportMinutes: day.sportMin,
-            workMinutes: day.tafMin,
-            prospectingMinutes: day.businessMin,
-            prospectContacts: day.contacts,
-            newClients: day.clients,
-            moodScore: day.humeur,
-            energyScore: day.energie,
-            stressScore: day.stress,
-            performanceScore: day.score,
-        } : day;
-        const dated = sourceDays.filter(day => day && day.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-        const selected = dated.find(item => item.date === requestedDate) || dated[0] || {};
-        const day = normalize(selected);
+        const picked = isIaPayload
+            ? pickLifeosDay(payload, requestedDate, ingested)
+            : (() => {
+                const sourceDays = Array.isArray(payload.recentDays) ? payload.recentDays : [];
+                const selected = sourceDays.find(item => item.date === requestedDate) || ingested || sourceDays[0] || {};
+                return { rawDays: sourceDays, day: normalizeIaDay(selected) };
+            })();
+        const day = picked.day;
+        const sourceDays = picked.rawDays;
         const period = isIaPayload ? {
-            daysWithData: payload.mois?.joursNotes || dated.length,
-            daysWithSleep: dated.filter(item => item.sommeil !== null && item.sommeil !== undefined).length,
-            daysWithFeel: dated.filter(item => item.humeur !== null || item.energie !== null).length,
+            daysWithData: payload.mois?.joursNotes || sourceDays.length,
+            daysWithSleep: sourceDays.filter(item => (item.sommeil ?? item.sleepHours) != null).length,
+            daysWithFeel: sourceDays.filter(item => (item.humeur ?? item.moodScore) != null || (item.energie ?? item.energyScore) != null).length,
         } : (payload.period || {});
         const averages = isIaPayload ? {
-            sleepHours: payload.mois?.tuiles?.find(x => x.label === 'Sommeil')?.value || null,
+            sleepHours: payload.mois?.tuiles?.find(x => x.label === 'Sommeil')?.value ?? null,
             performanceScore: payload.mois?.scoreMoyen ?? null,
         } : ((payload.computedSummary || {}).averages7d || {});
         const integrations = await readIntegrations();
@@ -280,7 +278,7 @@ app.get('/dashboard', async (req, res) => {
                 active_hours: activitywatch.summary?.active_hours ?? null,
                 available: isConnected(activitywatch)
             },
-            source: isIaPayload ? 'lifeos-ia-api' : 'lifeos-api',
+            source: ingested ? 'lifeos-push' : (isIaPayload ? 'lifeos-ia-api' : 'lifeos-api'),
             agent: 'hermes',
         });
     } catch (error) {
