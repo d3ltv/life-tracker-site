@@ -3,6 +3,7 @@ const cors = require('cors');
 const { readState, updateState } = require('./store');
 const supabaseStore = require('./supabase_store');
 const businessStore = require('./business_store');
+const { computeBusinessMetrics, buildLifeTrends, aggregateMeals } = require('./metrics');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -74,6 +75,7 @@ app.get('/dashboard', async (req, res) => {
         res.json({
             date: day.date || requestedDate || null,
             lifeos_day: day,
+            trends: buildLifeTrends(sourceDays, req.query.range || 30),
             targets: (payload.targets || {}).daily || {},
             summary: { ...period, averages7d: averages },
             screen: { available: false, reason: 'Screen Time doit être connecté côté source de données.' },
@@ -88,10 +90,14 @@ app.get('/dashboard', async (req, res) => {
 // Journal libre : événements et informations non prévues par les métriques
 app.get('/journal', async (req, res) => {
     const date = req.query.date;
-    if (!date) return res.status(400).json({ error: 'Date requise' });
+    const limit = Math.min(Number(req.query.limit) || 100, 200);
     try {
-        const remote = await supabaseStore.list(supabaseStore.TABLES.journal, { date, limit: 100 });
-        return res.json({ entries: remote || journalEntries.filter(entry => entry.date === date), source: remote ? 'supabase' : 'local' });
+        const remote = await supabaseStore.list(supabaseStore.TABLES.journal, { date, limit });
+        const localEntries = journalEntries
+            .filter(entry => !date || entry.date === date)
+            .slice(-limit)
+            .reverse();
+        return res.json({ entries: remote || localEntries, source: remote ? 'supabase' : 'local' });
     } catch (error) {
         return res.status(502).json({ error: 'Lecture journal impossible', detail: error.message });
     }
@@ -176,7 +182,15 @@ app.get('/business/state', async (req, res) => {
                 source: 'supabase',
                 contacts: contacts || [],
                 processes: processes || [],
-                settings: settings?.[0] || null
+                settings: settings?.[0] || null,
+                metrics: computeBusinessMetrics(contacts || []),
+                connections: {
+                    supabase: true,
+                    lifeos: true,
+                    telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN),
+                    google: false,
+                    activitywatch: false
+                }
             });
         }
         return res.json({ source: 'local', contacts: [], processes: [], settings: null });
@@ -216,36 +230,28 @@ app.put('/business/settings', async (req, res) => {
     } catch (error) { return res.status(502).json({ error: 'Enregistrement objectifs impossible', detail: error.message }); }
 });
 
-// Get today's meals
-app.get('/history', (req, res) => {
+// Repas : Supabase en production, fallback local en développement.
+app.get('/history', async (req, res) => {
     const date = req.query.date;
-    if (!date) {
-        return res.status(400).json({ error: 'Date requise' });
-    }
-    
-    const dayMeals = meals.filter(m => m.date === date);
-    res.json({ meals: dayMeals });
+    if (!date) return res.status(400).json({ error: 'Date requise' });
+    try {
+        const remote = await supabaseStore.list(supabaseStore.TABLES.meals, { date, limit: 100 });
+        return res.json({ meals: remote || meals.filter(meal => meal.date === date), source: remote ? 'supabase' : 'local' });
+    } catch (error) { return res.status(502).json({ error: 'Lecture repas impossible', detail: error.message }); }
 });
 
-// Get stats for today
-app.get('/stats/today', (req, res) => {
+app.get('/stats/today', async (req, res) => {
     const date = req.query.date;
-    if (!date) {
-        return res.status(400).json({ error: 'Date requise' });
-    }
-    
-    const dayMeals = meals.filter(m => m.date === date);
-    
-    const protein = dayMeals.reduce((sum, m) => sum + (m.protein_g || 0), 0);
-    const carbs = dayMeals.reduce((sum, m) => sum + (m.carbs_g || 0), 0);
-    const calories = dayMeals.reduce((sum, m) => sum + (m.calories || 0), 0);
-    const mealCount = dayMeals.length;
-    
-    res.json({ protein, carbs, calories, mealCount });
+    if (!date) return res.status(400).json({ error: 'Date requise' });
+    try {
+        const remote = await supabaseStore.list(supabaseStore.TABLES.meals, { date, limit: 100 });
+        const totals = aggregateMeals(remote || meals.filter(meal => meal.date === date));
+        return res.json({ ...totals, mealCount: totals.count, source: remote ? 'supabase' : 'local' });
+    } catch (error) { return res.status(502).json({ error: 'Statistiques repas impossibles', detail: error.message }); }
 });
 
 // Post a meal (receives from Telegram webhook or direct POST)
-app.post('/meal', (req, res) => {
+app.post('/meal', async (req, res) => {
     const meal = req.body;
     
     // Validate required fields
@@ -261,19 +267,18 @@ app.post('/meal', (req, res) => {
     // Add timestamp
     meal.createdAt = new Date();
     
-    // Store
-    meals.push(meal);
-    
-    // Keep only last 365 days to avoid storage growth
-    if (meals.length > 365) {
-        meals = meals.slice(-365);
-    }
-    updateState(state => { state.meals = meals; state.journalEntries = journalEntries; });
-    res.json({ success: true, id: meals.length - 1 });
+    try {
+        const remote = await supabaseStore.saveMeal(meal);
+        if (remote) return res.status(201).json({ success: true, meal: remote, source: 'supabase' });
+        meals.push(meal);
+        if (meals.length > 365) meals = meals.slice(-365);
+        updateState(state => { state.meals = meals; state.journalEntries = journalEntries; });
+        return res.status(201).json({ success: true, id: meals.length - 1, source: 'local' });
+    } catch (error) { return res.status(502).json({ error: 'Enregistrement repas impossible', detail: error.message }); }
 });
 
 // Telegram webhook endpoint
-app.post('/api/telegram-webhook', (req, res) => {
+app.post('/telegram-webhook', async (req, res) => {
     const update = req.body;
     
     if (!update.message) {
@@ -323,11 +328,16 @@ app.post('/api/telegram-webhook', (req, res) => {
         };
         
         // Store
-        meals.push(meal);
-        if (meals.length > 365) {
-            meals = meals.slice(-365);
+        try {
+            const remote = await supabaseStore.saveMeal(meal);
+            if (!remote) {
+                meals.push(meal);
+                if (meals.length > 365) meals = meals.slice(-365);
+                updateState(state => { state.meals = meals; state.journalEntries = journalEntries; });
+            }
+        } catch (error) {
+            return res.status(502).json({ ok: false, error: 'Enregistrement repas impossible' });
         }
-        updateState(state => { state.meals = meals; state.journalEntries = journalEntries; });
         
         // Confirm to user
         fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {

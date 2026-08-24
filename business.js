@@ -5,11 +5,62 @@
   const $ = (id) => document.getElementById(id);
   const api = (path, options) => fetch(`/api${path}`, { cache: 'no-store', ...options });
 
+  const average = values => {
+    const known = values.filter(value => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
+    return known.length ? known.reduce((sum, value) => sum + value, 0) / known.length : null;
+  };
+
+  function renderBars(id, values, maxValue) {
+    const el = $(id);
+    if (!el) return;
+    el.innerHTML = values.map(value => {
+      const known = value !== null && value !== undefined && Number.isFinite(Number(value));
+      const height = known ? Math.max(8, Math.min(100, Number(value) / maxValue * 100)) : 5;
+      return `<i class="${known ? '' : 'missing'}" style="height:${height}%"></i>`;
+    }).join('');
+  }
+
+  async function loadTrends() {
+    try {
+      const response = await api('/dashboard?range=30');
+      if (!response.ok) throw new Error(`API ${response.status}`);
+      const data = await response.json();
+      const trends = data.trends || [];
+      const sleep = trends.map(day => day.sleepHours);
+      const energy = trends.map(day => day.energyScore);
+      const business = trends.map(day => day.businessMinutes);
+      renderBars('trend-sleep', sleep, 10);
+      renderBars('trend-energy', energy, 10);
+      renderBars('trend-business', business, 180);
+      const sleepAvg = average(sleep); const energyAvg = average(energy); const businessTotal = business.filter(x => x !== null && x !== undefined).reduce((a,b) => a + Number(b), 0);
+      $('trend-sleep-summary').textContent = sleepAvg === null ? 'non renseigné' : `${sleepAvg.toFixed(1).replace('.', ',')} h moy.`;
+      $('trend-energy-summary').textContent = energyAvg === null ? 'non renseignée' : `${energyAvg.toFixed(1).replace('.', ',')} / 10`;
+      $('trend-business-summary').textContent = business.some(x => x !== null && x !== undefined) ? `${Math.round(businessTotal)} min` : 'non renseigné';
+      $('trend-note').textContent = `${trends.length} jours disponibles · les absences restent non renseignées.`;
+    } catch (error) {
+      $('trend-note').textContent = 'Tendances temporairement indisponibles.';
+    }
+  }
+
   async function loadBusinessState() {
     try {
       const response = await api('/business/state');
       if (!response.ok) throw new Error(`API ${response.status}`);
       const remote = await response.json();
+      $('sync-status').textContent = remote.source === 'supabase' ? 'Supabase synchronisé' : 'Mode local';
+      $('sync-status').classList.toggle('is-live', remote.source === 'supabase');
+      const connections = remote.connections || {};
+      const setConnection = (id, active, liveText, fallbackText) => {
+        const element = $(id); if (!element) return;
+        element.classList.toggle('connected', Boolean(active));
+        const label = element.querySelector('small');
+        if (label) label.textContent = active ? liveText : fallbackText;
+      };
+      setConnection('connection-supabase', remote.source === 'supabase', 'base cloud synchronisée', 'mode local uniquement');
+      setConnection('connection-lifeos', true, 'API IA disponible', 'API IA indisponible');
+      setConnection('connection-telegram', connections.telegram, 'token serveur configuré', 'Hermes local · non vérifié côté API');
+      setConnection('connection-google', false, '', 'local sur Mac · pas synchronisé au site');
+      setConnection('connection-activitywatch', false, '', 'local sur Mac · agrégats non synchronisés');
       if (remote.source !== 'supabase') return;
       state.clients = (remote.contacts || []).map(item => ({
         ...item,
@@ -19,6 +70,9 @@
       }));
       state.prospects = [];
       state.processes = remote.processes || [];
+      if (remote.metrics) {
+        state.revenue = Number(remote.metrics.signedValue || 0);
+      }
       if (remote.settings) {
         state.settings = {
           revenueTarget: Number(remote.settings.revenue_target ?? 10000),
@@ -29,7 +83,25 @@
       localStorage.setItem(storeKey, JSON.stringify(state));
       render();
     } catch (error) {
+      $('sync-status').textContent = 'Mode local · API indisponible';
       console.warn('Business OS : mode local.', error);
+    }
+  }
+
+  async function loadJournal() {
+    try {
+      const response = await api('/journal?limit=50');
+      if (!response.ok) throw new Error(`API ${response.status}`);
+      const data = await response.json();
+      state.journal = (data.entries || []).map(item => ({
+        title: item.category || 'journal',
+        body: item.text || '',
+        date: item.date || ''
+      }));
+      localStorage.setItem(storeKey, JSON.stringify(state));
+      render();
+    } catch (error) {
+      console.warn('Journal : mode local.', error);
     }
   }
   const save = () => { localStorage.setItem(storeKey, JSON.stringify(state)); $('last-update').textContent = new Date().toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); };
@@ -51,12 +123,13 @@
 
   function render() {
     const settings = state.settings || { revenueTarget: 10000, savingsTarget: 2000 };
-    const prospects = state.prospects || [];
-    const clients = state.clients || [];
-    const active = [...prospects, ...clients].filter(x => x.status !== 'perdu');
-    const signed = [...clients, ...prospects].filter(x => x.status === 'client');
-    const opportunities = active.filter(x => x.status === 'rdv' || x.status === 'proposition' || x.status === 'prospect');
-    const pipeline = active.reduce((sum, item) => sum + Number(item.value || 0), 0);
+    const contacts = [...(state.prospects || []), ...(state.clients || [])];
+    const prospects = contacts.filter(x => x.status === 'prospect');
+    const clients = contacts.filter(x => x.status === 'client');
+    const active = contacts.filter(x => x.status !== 'perdu');
+    const signed = clients;
+    const opportunities = contacts.filter(x => x.status === 'rdv' || x.status === 'proposition');
+    const pipeline = contacts.filter(x => ['prospect', 'rdv', 'proposition'].includes(x.status)).reduce((sum, item) => sum + Number(item.value || 0), 0);
     $('revenue-value').textContent = Number(state.revenue || 0).toLocaleString('fr-FR');
     $('revenue-target-label').textContent = `${Number(settings.revenueTarget).toLocaleString('fr-FR')} €`;
     $('savings-target-label').textContent = `${Number(settings.savingsTarget).toLocaleString('fr-FR')} €`;
@@ -77,12 +150,13 @@
     $('value-notes').textContent = state.journal.length;
     $('savings-value').textContent = Number(state.savings || 0).toLocaleString('fr-FR');
     $('savings-label').textContent = `${Number(state.savings || 0).toLocaleString('fr-FR')} / ${Number(settings.savingsTarget).toLocaleString('fr-FR')} €`;
-    $('savings-progress').style.width = `${Math.min(100, Number(state.savings || 0) / Number(settings.savingsTarget) * 100)}%`;
-    $('savings-bar').style.width = `${Math.min(100, Number(state.savings || 0) / Number(settings.savingsTarget) * 100)}%`;
-    $('revenue-bar').style.width = `${Math.min(100, Number(state.revenue || 0) / Number(settings.revenueTarget) * 100)}%`;
-    $('pipeline-bar').style.width = `${Math.min(100, pipeline / Number(settings.revenueTarget) * 100)}%`;
-    $('prospects-bar').style.width = `${Math.min(100, prospects.length * 10)}%`;
-    $('clients-bar').style.width = `${Math.min(100, clients.length * 20)}%`;
+    const progress = (value, target) => target > 0 ? Math.min(100, value / target * 100) : 0;
+    $('savings-progress').style.width = `${progress(Number(state.savings || 0), Number(settings.savingsTarget))}%`;
+    $('savings-bar').style.width = `${progress(Number(state.savings || 0), Number(settings.savingsTarget))}%`;
+    $('revenue-bar').style.width = `${progress(Number(state.revenue || 0), Number(settings.revenueTarget))}%`;
+    $('pipeline-bar').style.width = `${progress(pipeline, Number(settings.revenueTarget))}%`;
+    if ($('prospects-bar')) $('prospects-bar').style.width = `${Math.min(100, prospects.length * 10)}%`;
+    if ($('clients-bar')) $('clients-bar').style.width = `${Math.min(100, clients.length * 20)}%`;
     const next = active.find(x => x.nextAction);
     if (next) { $('next-action-title').textContent = next.nextAction; $('next-action-copy').textContent = `${next.name} · ${next.status}`; }
     renderList('clients-list', state.clients, 'Aucun client ou prospect enregistré.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.name)}</div><div class="entry-meta">${esc(x.note || '')}</div></div><span class="entry-tag">${esc(x.status)}</span></div>`);
@@ -120,7 +194,12 @@
         const result = await response.json();
         state.processes.push(result.process || data);
       }
-      if (activeType === 'journal') state.journal.push({...data, date: new Date().toLocaleDateString('fr-FR')});
+      if (activeType === 'journal') {
+        const today = new Date().toISOString().slice(0, 10);
+        const response = await api('/journal', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ date: today, text: data.body, category: data.title, source: 'business-web' }) });
+        if (!response.ok) throw new Error(`API ${response.status}`);
+        await loadJournal();
+      }
       save(); render(); $('entry-dialog').close(); e.target.reset();
     } catch (error) {
       console.error('Enregistrement Business OS impossible.', error);
@@ -128,6 +207,8 @@
     }
   });
   loadBusinessState();
+  loadJournal();
+  loadTrends();
   $('export-button').addEventListener('click', () => { const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`lifeos-business-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(a.href); });
   render();
 })();

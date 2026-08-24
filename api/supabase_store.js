@@ -45,4 +45,17 @@ async function saveAdvice(entry) {
   });
 }
 
-module.exports = { TABLES, list, saveJournal, saveAdvice, isConfigured };
+async function saveMeal(entry) {
+  return insert(TABLES.meals, {
+    date: entry.date,
+    meal_type: entry.meal_type || 'custom',
+    protein_g: Number(entry.protein_g) || 0,
+    carbs_g: Number(entry.carbs_g) || 0,
+    calories: Number(entry.calories) || 0,
+    quality: entry.quality || 'non précisée',
+    source: entry.source || 'web',
+    metadata: entry.metadata || {}
+  });
+}
+
+module.exports = { TABLES, list, saveJournal, saveAdvice, saveMeal, isConfigured };
