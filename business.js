@@ -107,6 +107,36 @@
   const save = () => { localStorage.setItem(storeKey, JSON.stringify(state)); $('last-update').textContent = new Date().toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); };
   const esc = (v) => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 
+  async function loadIntegrations() {
+    try {
+      const response = await api('/integrations/latest');
+      if (!response.ok) throw new Error(`API ${response.status}`);
+      const data = await response.json();
+      const integrations = data.integrations || {};
+      const gmail = integrations.gmail || {}; const calendar = integrations.calendar || {}; const activity = integrations.activitywatch || {};
+      const gmailSummary = gmail.summary || {}; const calendarSummary = calendar.summary || {}; const activitySummary = activity.summary || {};
+      $('gmail-business-count').textContent = gmailSummary.business_signal_count ?? '—';
+      $('calendar-today-count').textContent = calendarSummary.event_count_today ?? '—';
+      $('activity-active-hours').textContent = activitySummary.active_hours == null ? '—' : `${activitySummary.active_hours} h`;
+      $('activity-switches').textContent = activitySummary.context_switches ?? '—';
+      $('activity-afk').textContent = activitySummary.afk_hours == null ? '—' : `${activitySummary.afk_hours} h`;
+      $('integration-updated').textContent = gmail.snapshot_date || calendar.snapshot_date || activity.snapshot_date || 'non synchronisé';
+      const gmailItems = gmail.items || [];
+      $('gmail-signals').innerHTML = gmailItems.length ? gmailItems.map(item => `<div><strong>${esc(item.kind || 'signal business')}</strong><small>${esc(item.date || '')} · ${esc(item.confidence || 'à vérifier')}</small></div>`).join('') : '<small>Aucun rendez-vous proposé détecté.</small>';
+      const eventItems = calendar.items || [];
+      $('calendar-events').innerHTML = eventItems.length ? eventItems.slice(0,5).map(item => `<div><strong>${esc(item.kind || 'événement')}</strong><small>${esc(item.start || '')}</small></div>`).join('') : '<small>Aucun événement à venir.</small>';
+      const googleConnected = gmailSummary.status === 'connected' || calendarSummary.status === 'connected';
+      const activityConnected = activitySummary.status === 'connected';
+      $('connection-google')?.classList.toggle('connected', googleConnected);
+      $('connection-activitywatch')?.classList.toggle('connected', activityConnected);
+      const googleLabel = $('connection-google')?.querySelector('small'); if (googleLabel) googleLabel.textContent = googleConnected ? 'agrégats synchronisés au site' : 'local sur Mac · pas encore synchronisé';
+      const activityLabel = $('connection-activitywatch')?.querySelector('small'); if (activityLabel) activityLabel.textContent = activityConnected ? 'agrégats synchronisés au site' : 'local sur Mac · pas encore synchronisé';
+    } catch (error) {
+      $('integration-updated').textContent = 'indisponible';
+      console.warn('Intégrations indisponibles.', error);
+    }
+  }
+
   async function loadAdvice() {
     const list = $('advice-list');
     if (!list) return;
@@ -211,6 +241,7 @@
   loadBusinessState();
   loadJournal();
   loadTrends();
+  loadIntegrations();
   $('export-button').addEventListener('click', () => { const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`lifeos-business-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(a.href); });
   render();
 })();

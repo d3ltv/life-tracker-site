@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "node --test metrics.test.js"
+    "test": "node --test metrics.test.js integration_store.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.8",

@@ -4,6 +4,7 @@ const { readState, updateState } = require('./store');
 const supabaseStore = require('./supabase_store');
 const businessStore = require('./business_store');
 const { computeBusinessMetrics, buildLifeTrends, aggregateMeals } = require('./metrics');
+const integrationStore = require('./integration_store');
 const app = express();
 const port = process.env.PORT || 3000;
 const publicOrigin = process.env.PUBLIC_ORIGIN || 'https://life-tracker-site.vercel.app';
@@ -41,6 +42,32 @@ app.get('/', (req, res) => {
 
 app.get('/status', (req, res) => {
     res.json({ online: true });
+});
+
+function hasSyncAccess(req) {
+    const expected = process.env.INTEGRATION_SYNC_SECRET;
+    const supplied = req.get('x-integration-secret');
+    return Boolean(expected && supplied && expected.length >= 24 && supplied === expected);
+}
+
+// Synchronisation Mac → Supabase. Cette route n'accepte jamais le contenu complet
+// des emails, URLs ou titres de fenêtres : seulement les agrégats préparés localement.
+app.post('/integrations/sync', async (req, res) => {
+    if (!hasSyncAccess(req)) return res.status(401).json({ error: 'Non autorisé' });
+    const snapshots = Array.isArray(req.body?.snapshots) ? req.body.snapshots : [];
+    if (!snapshots.length || snapshots.length > 3) return res.status(400).json({ error: 'Snapshots requis' });
+    try {
+        const saved = [];
+        for (const snapshot of snapshots) saved.push(await integrationStore.upsert(snapshot));
+        return res.json({ success: true, saved: saved.filter(Boolean).map(row => ({ source: row.source, snapshot_date: row.snapshot_date })) });
+    } catch (error) { return safeError(res, 400, 'Synchronisation impossible', error); }
+});
+
+app.get('/integrations/latest', async (req, res) => {
+    try {
+        const data = await integrationStore.latest();
+        return res.json({ source: data ? 'supabase' : 'local', integrations: data || {} });
+    } catch (error) { return safeError(res, 502, 'Lecture des intégrations impossible', error); }
 });
 
 // Synthèse LifeOS pour le dashboard principal
