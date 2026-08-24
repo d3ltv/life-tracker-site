@@ -46,8 +46,21 @@ app.get('/status', (req, res) => {
 
 function hasSyncAccess(req) {
     const expected = process.env.INTEGRATION_SYNC_SECRET;
-    const supplied = req.get('x-integration-secret');
+    const supplied = req.get('x-integration-secret') || req.get('x-sync-secret');
     return Boolean(expected && supplied && expected.length >= 24 && supplied === expected);
+}
+
+async function readIntegrations() {
+    try {
+        return await integrationStore.latest() || {};
+    } catch (error) {
+        console.error('Lecture intégrations', error);
+        return {};
+    }
+}
+
+function isConnected(row) {
+    return String(row?.summary?.status || '') === 'connected';
 }
 
 // Synchronisation Mac → Supabase. Cette route n'accepte jamais le contenu complet
@@ -108,6 +121,10 @@ app.get('/dashboard', async (req, res) => {
             sleepHours: payload.mois?.tuiles?.find(x => x.label === 'Sommeil')?.value || null,
             performanceScore: payload.mois?.scoreMoyen ?? null,
         } : ((payload.computedSummary || {}).averages7d || {});
+        const integrations = await readIntegrations();
+        const gmail = integrations.gmail || {};
+        const calendar = integrations.calendar || {};
+        const activitywatch = integrations.activitywatch || {};
 
         res.json({
             date: day.date || requestedDate || null,
@@ -116,7 +133,15 @@ app.get('/dashboard', async (req, res) => {
             targets: (payload.targets || {}).daily || {},
             summary: { ...period, averages7d: averages },
             screen: { available: false, reason: 'Screen Time doit être connecté côté source de données.' },
-            google: { email_count: 0, calendar_events_count: 0, available: false },
+            google: {
+                email_count: gmail.summary?.email_count_30d ?? 0,
+                calendar_events_count: calendar.summary?.event_count_today ?? 0,
+                available: isConnected(gmail) || isConnected(calendar)
+            },
+            activitywatch: {
+                active_hours: activitywatch.summary?.active_hours ?? null,
+                available: isConnected(activitywatch)
+            },
             source: isIaPayload ? 'lifeos-ia-api' : 'lifeos-api',
         });
     } catch (error) {
@@ -179,7 +204,14 @@ app.get('/advice', async (req, res) => {
 });
 
 app.post('/advice', async (req, res) => {
-    const { date, diagnosis, lever, action, domain = 'business', priority = 'normal', source = 'hermes' } = req.body || {};
+    const body = req.body || {};
+    const date = body.date;
+    const diagnosis = body.diagnosis || body.diagnosis || body.diagnostic;
+    const lever = body.lever || body.lever;
+    const action = body.action || body.action;
+    const domain = body.domain || body.domain || 'business';
+    const priority = body.priority || body.priority || 'normal';
+    const source = body.source || 'hermes';
     if (!date || !diagnosis || !action) {
         return res.status(400).json({ error: 'date, diagnosis et action sont requis' });
     }
@@ -215,6 +247,10 @@ app.get('/business/state', async (req, res) => {
             businessStore.list(businessStore.TABLES.settings)
         ]);
         if (contacts || processes || settings) {
+            const integrations = await readIntegrations();
+            const gmail = integrations.gmail || {};
+            const calendar = integrations.calendar || {};
+            const activitywatch = integrations.activitywatch || {};
             return res.json({
                 source: 'supabase',
                 contacts: contacts || [],
@@ -225,8 +261,8 @@ app.get('/business/state', async (req, res) => {
                     supabase: true,
                     lifeos: true,
                     telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN),
-                    google: false,
-                    activitywatch: false
+                    google: isConnected(gmail) || isConnected(calendar),
+                    activitywatch: isConnected(activitywatch)
                 }
             });
         }

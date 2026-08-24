@@ -59,8 +59,8 @@
       setConnection('connection-supabase', remote.source === 'supabase', 'base cloud synchronisée', 'mode local uniquement');
       setConnection('connection-lifeos', true, 'API IA disponible', 'API IA indisponible');
       setConnection('connection-telegram', connections.telegram, 'token serveur configuré', 'Hermes local · non vérifié côté API');
-      setConnection('connection-google', false, '', 'local sur Mac · pas synchronisé au site');
-      setConnection('connection-activitywatch', false, '', 'local sur Mac · agrégats non synchronisés');
+      setConnection('connection-google', connections.google, 'agrégats synchronisés au site', 'local sur Mac · pas encore synchronisé');
+      setConnection('connection-activitywatch', connections.activitywatch, 'agrégats synchronisés au site', 'local sur Mac · pas encore synchronisé');
       if (remote.source !== 'supabase') return;
       state.clients = (remote.contacts || []).map(item => ({
         ...item,
@@ -124,7 +124,12 @@
       const gmailItems = gmail.items || [];
       $('gmail-signals').innerHTML = gmailItems.length ? gmailItems.map(item => `<div><strong>${esc(item.kind || 'signal business')}</strong><small>${esc(item.date || '')} · ${esc(item.confidence || 'à vérifier')}</small></div>`).join('') : '<small>Aucun rendez-vous proposé détecté.</small>';
       const eventItems = calendar.items || [];
-      $('calendar-events').innerHTML = eventItems.length ? eventItems.slice(0,5).map(item => `<div><strong>${esc(item.kind || 'événement')}</strong><small>${esc(item.start || '')}</small></div>`).join('') : '<small>Aucun événement à venir.</small>';
+      $('calendar-events').innerHTML = eventItems.length ? eventItems.slice(0,5).map(item => {
+        const start = item.start || '';
+        const client = Boolean(item.client_related);
+        const action = client ? `<button type="button" class="text-button calendar-contact" data-start="${esc(start)}" data-ref="${esc(item.event_ref || '')}">Créer un contact</button>` : '';
+        return `<div><strong>${esc(item.kind || 'événement')}</strong><small>${esc(start)}</small>${action}</div>`;
+      }).join('') : '<small>Aucun événement à venir.</small>';
       const googleConnected = gmailSummary.status === 'connected' || calendarSummary.status === 'connected';
       const activityConnected = activitySummary.status === 'connected';
       $('connection-google')?.classList.toggle('connected', googleConnected);
