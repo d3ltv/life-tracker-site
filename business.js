@@ -243,6 +243,36 @@
       alert('Impossible de synchroniser cette entrée. Vérifie la connexion puis réessaie.');
     }
   });
+  $('calendar-events')?.addEventListener('click', async event => {
+    const button = event.target.closest('.calendar-contact');
+    if (!button) return;
+    const day = String(button.dataset.start || '').slice(0, 10);
+    const ref = button.dataset.ref || '';
+    button.disabled = true;
+    try {
+      const response = await api('/business/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `Rendez-vous client ${day}`,
+          status: 'rdv',
+          nextAction: `Suite du rendez-vous du ${day}`,
+          note: `Issu de l'agenda${ref ? ` · agenda:${ref}` : ''}`,
+          source: 'calendar'
+        })
+      });
+      if (!response.ok) throw new Error(`API ${response.status}`);
+      const result = await response.json();
+      state.clients.push(result.contact || { name: `Rendez-vous client ${day}`, status: 'rdv' });
+      save();
+      render();
+    } catch (error) {
+      console.error('Création contact agenda impossible.', error);
+      alert('Impossible de créer le contact depuis l’agenda.');
+    } finally {
+      button.disabled = false;
+    }
+  });
   loadBusinessState();
   loadJournal();
   loadTrends();

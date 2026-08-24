@@ -86,7 +86,9 @@
     const screen = data.screen || {};
     setText('screen-source-status', screen.available ? `${fmt(screen.total_hours, 1)} h enregistrées aujourd’hui` : 'export réel à connecter');
     const google = data.google || {};
-    setText('google-source-status', `${fmt(google.email_count)} emails · ${fmt(google.calendar_events_count)} événements`);
+    setText('google-source-status', google.available ? `${fmt(google.email_count ?? google.email_count)} emails · ${fmt(google.calendar_events_count ?? google.calendar_events_count)} événements` : 'lecture seule · pas encore synchronisé');
+    const activitywatch = data.activitywatch || {};
+    setText('activitywatch-source-status', activitywatch.available ? `${fmt(activitywatch.active_hours, 1)} h actives aujourd’hui` : 'agrégats Mac à synchroniser');
     const date = data.date || today;
     setText('date-label', new Date(`${date}T12:00:00`).toLocaleDateString('fr-FR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' }).toUpperCase());
     setText('signal-date', date.split('-').reverse().join('.'));

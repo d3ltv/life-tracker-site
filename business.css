@@ -714,6 +714,11 @@ dialog::backdrop {
   overflow-wrap: anywhere;
 }
 
+.compact-list .text-button {
+  margin-top: 6px;
+  font-size: 10px;
+}
+
 .compact-list small,
 .micro-stats {
   color: var(--muted);

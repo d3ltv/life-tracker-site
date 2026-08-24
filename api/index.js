@@ -348,8 +348,79 @@ app.post('/meal', async (req, res) => {
     } catch (error) { return res.status(502).json({ error: 'Enregistrement repas impossible', detail: error.message }); }
 });
 
-// Telegram webhook endpoint
+const { parseProcess } = require('./process-sense');
+
+// Telegram webhook endpoint — saisie naturelle : process, journal, conseil
 app.post('/telegram-webhook', async (req, res) => {
+    const update = req.body;
+    if (!update.message || !update.message.text) {
+        return res.status(200).json({ ok: true });
+    }
+
+    const message = update.message;
+    const chatId = message.chat?.id;
+    const text = message.text.trim();
+    if (!chatId || !text) return res.status(200).json({ ok: true });
+
+    // Format attendu dans Telegram pour un process
+    // Ex: "Mon process pour la vidéo de recrutement: repère les annonces → appelle → propose → tourne → livre"
+    if (text.startsWith('/process') || /\b(mon process|process pour|méthode|procédure|workflow)\b/i.test(text)) {
+        const cleanText = text.replace(/^\s*(mon process|process|méthode|workflow)\s*[:\-]?\s*/i, '').trim();
+        const parsed = parseProcess(cleanText || text);
+
+        // Confirmation envoyée à l'utilisateur sur Telegram
+        const inform = () => {
+            let note;
+            if (parsed.valid) {
+                note = `✅ **Ton process est noté** : 
+${parsed.steps.join('\n' )};
+enrichissant Business OS...`;
+            } else {
+                note = `💬 J'ai bien noté ton process, mais il me manque des étapes. Peux-tu préciser par exemple : 
+"/process ma méthode pour faire une vidéo de recrutement : repérer les annonces sur Indeed, appeler l'entreprise..."`;
+            }
+            fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, text: note })
+            });
+        };
+
+        if (!parsed.valid) {
+            inform();
+            return res.status(200).json({ ok: true });
+        }
+
+        try {
+            const response = await fetch(`https://life-tracker-site.vercel.app/api/process`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: parsed.title,
+                    description: parsed.description,
+                    steps: parsed.steps,
+                    category: parsed.category,
+                    source: 'telegram'
+                })
+            });
+            const remote = await response.json();
+            if (!response.ok) throw new Error(remote.error);
+
+            inform();
+            return res.status(201).json({ success: true, process: remote });
+        } catch (error) {
+            console.error('Erreur webhook → process :', error);
+            fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, text: `⚠️ Impossible d'enregistrer pour le moment : ${error.message}` })
+            });
+            return res.status(500).json({ error: error.message });
+        }
+    }
+
+    return res.status(200).json({ ok: true });
+});
     const update = req.body;
     
     if (!update.message) {

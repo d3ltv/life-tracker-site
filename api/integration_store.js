@@ -2,15 +2,46 @@ const { client, isConfigured } = require('./supabase');
 
 const TABLE = 'integration_snapshots';
 const SOURCES = new Set(['gmail', 'calendar', 'activitywatch']);
+const ITEM_KEYS = {
+  gmail: new Set(['date', 'kind', 'confidence']),
+  calendar: new Set(['start', 'end', 'kind', 'client_related', 'event_ref']),
+  activitywatch: new Set()
+};
+const SUMMARY_KEYS = {
+  gmail: new Set(['email_count_30d', 'email_count', 'business_signal_count', 'meeting_suggestion_count', 'status']),
+  calendar: new Set(['event_count_today', 'upcoming_count', 'client_event_count', 'status']),
+  activitywatch: new Set(['active_hours', 'afk_hours', 'context_switches', 'unique_applications', 'unique_websites', 'status'])
+};
+
+function isSensitive(value) {
+  const text = String(value);
+  return /@/.test(text) || /https?:\/\//i.test(text) || /www\./i.test(text);
+}
+
+function pickAllowed(object, allowed) {
+  const out = {};
+  for (const [key, value] of Object.entries(object || {})) {
+    if (!allowed.has(key) || value == null || value === '') continue;
+    if (typeof value === 'string' && isSensitive(value)) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+function sanitizeItems(source, items) {
+  const allowed = ITEM_KEYS[source] || new Set();
+  return (Array.isArray(items) ? items : []).slice(0, 100).map(item => pickAllowed(item, allowed));
+}
 
 function validate(snapshot) {
   if (!snapshot || !SOURCES.has(snapshot.source)) throw new Error('Source invalide');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(snapshot.snapshot_date || ''))) throw new Error('Date invalide');
+  const source = snapshot.source;
   return {
-    source: snapshot.source,
+    source,
     snapshot_date: snapshot.snapshot_date,
-    summary: snapshot.summary && typeof snapshot.summary === 'object' ? snapshot.summary : {},
-    items: Array.isArray(snapshot.items) ? snapshot.items.slice(0, 100) : [],
+    summary: pickAllowed(snapshot.summary && typeof snapshot.summary === 'object' ? snapshot.summary : {}, SUMMARY_KEYS[source] || new Set()),
+    items: sanitizeItems(source, snapshot.items),
     collected_at: snapshot.collected_at || new Date().toISOString()
   };
 }
@@ -35,4 +66,4 @@ async function latest() {
   return result;
 }
 
-module.exports = { SOURCES, validate, upsert, latest };
+module.exports = { SOURCES, validate, upsert, latest, sanitizeItems };
