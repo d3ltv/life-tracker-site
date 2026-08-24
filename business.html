@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b0d0f" />
+  <title>LifeOS — Business OS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="business.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="index.html"><span class="brand-mark">L</span><span><strong>lifeos</strong><small>personal intelligence</small></span></a>
+      <nav class="nav" aria-label="Navigation principale">
+        <a class="nav-item" href="index.html"><span>◒</span> Vue d'ensemble</a>
+        <a class="nav-item" href="index.html#nutrition"><span>⌁</span> Nutrition</a>
+        <a class="nav-item active" href="business.html"><span>↗</span> Business OS</a>
+      </nav>
+      <div class="sidebar-note"><span class="live-dot"></span><div><strong>Système actif</strong><small>Deuxième cerveau en construction</small></div></div>
+      <div class="sidebar-footer">Dernière modification<br><strong id="last-update">—</strong></div>
+    </aside>
+
+    <main class="content" id="top">
+      <header class="topbar">
+        <div><p class="eyebrow">BUSINESS OS · V1</p><h1>Construire une entreprise<br><em>qui se souvient.</em></h1></div>
+        <div class="top-actions"><button class="icon-button" id="export-button" title="Exporter les données" aria-label="Exporter les données">↓</button><div class="avatar">M</div></div>
+      </header>
+
+      <section class="business-intro">
+        <div><p class="eyebrow">NORTH STAR</p><h2>10 000 € / mois</h2><p>Chaque action enregistrée doit aider à générer du revenu, sécuriser les opérations ou augmenter la valeur de l'entreprise.</p></div>
+        <div class="milestone"><span>PROCHAINE ÉTAPE</span><strong>2 000 € d'épargne</strong><small>pour quitter Subway</small><div class="progress-line"><i id="savings-progress"></i></div><b id="savings-label">0 / 2 000 €</b></div>
+      </section>
+
+      <section class="section-block"><div class="section-heading"><div><p class="eyebrow">TABLEAU DE BORD</p><h2>Les signaux qui comptent</h2></div><span class="date-chip">Aujourd'hui</span></div>
+        <div class="metric-grid business-metrics">
+          <article class="metric-card accent"><div class="metric-top"><span>CA du mois</span><b>01</b></div><strong><span id="revenue-value">0</span><small> €</small></strong><div class="metric-bar"><i id="revenue-bar"></i></div><p>Objectif <span>10 000 €</span></p></article>
+          <article class="metric-card"><div class="metric-top"><span>Prospects actifs</span><b>02</b></div><strong id="prospects-value">0</strong><div class="metric-bar"><i id="prospects-bar"></i></div><p>Contacts en cours de suivi</p></article>
+          <article class="metric-card"><div class="metric-top"><span>Clients</span><b>03</b></div><strong id="clients-value">0</strong><div class="metric-bar"><i id="clients-bar"></i></div><p>Clients enregistrés</p></article>
+        </div>
+      </section>
+
+      <section class="section-block split-grid">
+        <div><div class="section-heading"><div><p class="eyebrow">PIPELINE</p><h2>Clients & opportunités</h2></div><button class="small-button" data-open="client-form">+ Ajouter</button></div><div class="list-panel" id="clients-list"><div class="blank-state"><span>01</span><strong>Ton premier client commence ici.</strong><p>Enregistre les opportunités dès le premier contact. Même un refus devient une donnée.</p></div></div></div>
+        <div><div class="section-heading"><div><p class="eyebrow">SYSTÈME</p><h2>Process documentés</h2></div><button class="small-button" data-open="process-form">+ Ajouter</button></div><div class="list-panel" id="process-list"><div class="blank-state"><span>02</span><strong>Chaque répétition peut devenir un process.</strong><p>Note les étapes maintenant. Tu prépareras la délégation plus tard.</p></div></div></div>
+      </section>
+
+      <section class="section-block operating-grid">
+        <article class="operating-card"><p class="eyebrow">ACTIF INTANGIBLE</p><h3>Ce qui augmente la valeur</h3><ul><li><span>Clients satisfaits</span><b id="value-clients">0</b></li><li><span>Process transmissibles</span><b id="value-processes">0</b></li><li><span>Décisions capitalisées</span><b id="value-notes">0</b></li></ul></article>
+        <article class="operating-card dark-card"><p class="eyebrow">CADENCE DE PILOTAGE</p><h3>Ce que le système cherchera</h3><div class="signal-list"><div><i></i><span>Prospection → opportunités</span></div><div><i></i><span>Opportunités → clients</span></div><div><i></i><span>Clients → process</span></div><div><i></i><span>Process → délégation</span></div></div></article>
+        <article class="operating-card"><p class="eyebrow">PROCHAINE ACTION</p><h3 id="next-action-title">Documenter une première répétition</h3><p id="next-action-copy">Choisis une tâche que tu fais déjà deux fois par semaine et écris-la comme si quelqu'un devait la reprendre demain.</p><button class="text-button" data-open="process-form">Créer le process <span>→</span></button></article>
+      </section>
+
+      <section class="section-block advice-section"><div class="section-heading"><div><p class="eyebrow">CONSEILS D'HERMES</p><h2>Ce que ton associé voit</h2></div><span class="live-label"><i class="live-dot"></i> Live</span></div><div class="advice-list" id="advice-list"><div class="blank-state"><span>04</span><strong>Aucun conseil enregistré.</strong><p>Écris <b>/conseil</b> dans Telegram pour obtenir un diagnostic et une action prioritaire.</p></div></div></section>
+
+      <section class="section-block journal-section"><div class="section-heading"><div><p class="eyebrow">MÉMOIRE OPÉRATIONNELLE</p><h2>Journal de progression</h2></div><button class="small-button" data-open="journal-form">+ Nouvelle note</button></div><div class="journal-list" id="journal-list"><div class="blank-state"><span>03</span><strong>Les décisions deviennent des actifs.</strong><p>Consigne les apprentissages, erreurs, décisions et améliorations de ton entreprise.</p></div></div></section>
+
+      <section class="architecture-note"><div class="architecture-number">∞</div><div><p class="eyebrow">VISION</p><h3>De tes actions à un actif transmissible.</h3><p>LifeOS reliera progressivement tes données personnelles, tes résultats business et tes procédures. L'objectif : savoir ce qui fonctionne, pourquoi, et comment le transmettre à quelqu'un d'autre.</p></div></section>
+      <footer><span>lifeos / business os</span><span>Les données sont privées et exportables.</span></footer>
+    </main>
+  </div>
+
+  <dialog id="entry-dialog"><form method="dialog" id="entry-form"><div class="dialog-head"><div><p class="eyebrow" id="dialog-kicker">NOUVELLE ENTRÉE</p><h2 id="dialog-title">Ajouter</h2></div><button value="cancel" class="dialog-close" aria-label="Fermer">×</button></div><div id="dialog-fields"></div><div class="dialog-actions"><button value="cancel" class="ghost-button">Annuler</button><button value="default" class="primary-button">Enregistrer</button></div></form></dialog>
+  <script src="business.js"></script>
+</body>
+</html>
