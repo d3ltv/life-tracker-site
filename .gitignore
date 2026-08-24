@@ -8,3 +8,5 @@ api/data/*
 !api/data/.gitkeep
 .DS_Store
 .vercel/
+.vercel
+.env*.local

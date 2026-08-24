@@ -6,6 +6,14 @@ const TABLES = {
   meals: 'meal_entries'
 };
 
+function stripMealPhotos(metadata = {}) {
+  const clean = { ...metadata };
+  for (const key of Object.keys(clean)) {
+    if (/photo|image|file_id|fileid|thumbnail|caption/i.test(key)) delete clean[key];
+  }
+  return clean;
+}
+
 async function list(table, { date, from, to, limit = 100 } = {}) {
   if (!isConfigured()) return null;
   let query = client().from(table).select('*').order('created_at', { ascending: false }).limit(limit);
@@ -56,7 +64,10 @@ async function saveMeal(entry) {
     calories: Number(entry.calories) || 0,
     quality: entry.quality || 'non précisée',
     source: entry.source || 'web',
-    metadata: entry.metadata || {}
+    metadata: stripMealPhotos({
+      ...(entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : {}),
+      fat_g: Number(entry.fat_g ?? entry.metadata?.fat_g) || 0
+    })
   });
 }
 

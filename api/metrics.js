@@ -38,13 +38,18 @@ function buildLifeTrends(days = [], limit = 30) {
     }));
 }
 
+function mealFat(meal) {
+  return number(meal.fat_g ?? meal.lipides ?? meal.metadata?.fat_g ?? meal.metadata?.lipides);
+}
+
 function aggregateMeals(meals = []) {
   return meals.reduce((totals, meal) => ({
     protein: totals.protein + number(meal.protein_g),
     carbs: totals.carbs + number(meal.carbs_g),
+    fat: totals.fat + mealFat(meal),
     calories: totals.calories + number(meal.calories),
     count: totals.count + 1
-  }), { protein: 0, carbs: 0, calories: 0, count: 0 });
+  }), { protein: 0, carbs: 0, fat: 0, calories: 0, count: 0 });
 }
 
 module.exports = { computeBusinessMetrics, buildLifeTrends, aggregateMeals };

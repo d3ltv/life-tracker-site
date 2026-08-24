@@ -1,8 +1,8 @@
 /**
- * Webhook Telegram pour les saisies naturelles : process, journal, conseil.
+ * Fallback Telegram seulement. Hermes Gateway est le consommateur principal.
+ * Ne pas setWebhook vers cette URL tant que la Gateway locale tourne.
  *
  * Route : POST /api/telegram-webhook
- * Usage : le bot Telegram aura cette URL comme webhook.
  */
 
 const { parseProcess } = require('./process-sense');

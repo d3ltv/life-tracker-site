@@ -56,9 +56,9 @@
         const label = element.querySelector('small');
         if (label) label.textContent = active ? liveText : fallbackText;
       };
+      setConnection('connection-hermes', connections.hermes !== false, 'agent Telegram · Gateway locale', 'agent hors ligne');
       setConnection('connection-supabase', remote.source === 'supabase', 'base cloud synchronisée', 'mode local uniquement');
-      setConnection('connection-lifeos', true, 'API IA disponible', 'API IA indisponible');
-      setConnection('connection-telegram', connections.telegram, 'token serveur configuré', 'Hermes local · non vérifié côté API');
+      setConnection('connection-lifeos', true, 'saisie du matin via API IA', 'API IA indisponible');
       setConnection('connection-google', connections.google, 'agrégats synchronisés au site', 'local sur Mac · pas encore synchronisé');
       setConnection('connection-activitywatch', connections.activitywatch, 'agrégats synchronisés au site', 'local sur Mac · pas encore synchronisé');
       if (remote.source !== 'supabase') return;
@@ -156,6 +156,45 @@
     }
   }
 
+  async function loadSources() {
+    try {
+      const response = await api('/business/sources');
+      if (!response.ok) throw new Error(`API ${response.status}`);
+      const data = await response.json();
+      state.sources = data.sources || [];
+      renderSources();
+    } catch (error) {
+      console.warn('Sources : mode local.', error);
+    }
+  }
+
+  function renderSources() {
+    const el = $('sources-list');
+    if (!el) return;
+    const sources = state.sources || [];
+    el.innerHTML = sources.length ? sources.map(s => `<div class="entry-row"><div><div class="entry-title">${esc(s.name)}</div><div class="entry-meta">${esc(s.type)} · ${s.is_active ? 'actif' : 'inactif'} · ${s.last_run_at ? `dernier run ${s.last_run_at.slice(0,10)}` : 'jamais lancé'} · ${s.leads_total || 0} leads total</div></div><span class="entry-tag">${esc(s.type)}</span></div>`).join('') : `<div class="blank-state"><span>S</span><strong>Aucune source configurée.</strong><p>Ajoute ta source Apify, LinkedIn, recommandations… pour tracker le volume et la qualité.</p></div>`;
+  }
+
+  async function loadActivities() {
+    try {
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      const response = await api(`/business/activities?date=${today}&limit=50`);
+      if (!response.ok) throw new Error(`API ${response.status}`);
+      const data = await response.json();
+      state.activities = data.activities || [];
+      renderActivities();
+    } catch (error) {
+      console.warn('Activités : mode local.', error);
+    }
+  }
+
+  function renderActivities() {
+    const el = $('activities-list');
+    if (!el) return;
+    const activities = state.activities || [];
+    el.innerHTML = activities.length ? activities.map(a => `<div class="entry-row"><div><div class="entry-title">${esc(a.channel)} · ${esc(a.outcome)}</div><div class="entry-meta">${a.contact_name ? `${esc(a.contact_name)} · ` : ''}${esc(a.note || '')}${a.duration_min ? ` · ${a.duration_min} min` : ''}</div></div><span class="entry-tag">${esc(a.date)}</span></div>`).join('') : `<div class="blank-state"><span>A</span><strong>Aucune activité enregistrée.</strong><p>Note chaque action : appel, visite, email. Le funnel se construit ici.</p></div>`;
+  }
+
   function render() {
     const settings = state.settings || { revenueTarget: 10000, savingsTarget: 2000 };
     const contacts = [...(state.prospects || []), ...(state.clients || [])];
@@ -197,15 +236,24 @@
     const next = active.find(x => x.nextAction);
     if (next) { $('next-action-title').textContent = next.nextAction; $('next-action-copy').textContent = `${next.name} · ${next.status}`; }
     renderList('clients-list', state.clients, 'Aucun client ou prospect enregistré.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.name)}</div><div class="entry-meta">${esc(x.note || '')}</div></div><span class="entry-tag">${esc(x.status)}</span></div>`);
-    renderList('process-list', state.processes, 'Aucun process documenté.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.title)}</div><div class="entry-meta">${esc(x.description || '')}</div></div><span class="entry-tag">process</span></div>`);
+    renderList('process-list', state.processes, 'Aucun process documenté.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.title)}</div><div class="entry-meta">${esc(x.description || '')}</div></div><span class="entry-tag">${esc(x.source === 'hermes' ? 'hermes' : 'process')}</span></div>`);
     renderList('journal-list', state.journal, 'Aucune note dans le journal.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.title)}</div><div class="entry-meta">${esc(x.body)}</div></div><span class="entry-tag">${esc(x.date)}</span></div>`, false);
   }
-  function renderList(id, items, empty, template, reverse = true) { const el=$(id); const ordered=reverse ? items.slice().reverse() : items.slice(); el.innerHTML=ordered.length ? ordered.map(template).join('') : `<div class="blank-state"><span>—</span><strong>${empty}</strong><p>Utilise le bouton « + Ajouter » pour commencer à construire ta mémoire opérationnelle.</p></div>`; }
+  function renderList(id, items, empty, template, reverse = true) {
+    const el = $(id);
+    const ordered = reverse ? items.slice().reverse() : items.slice();
+    const hint = id === 'process-list'
+      ? "Dis-le à Hermes sur Telegram, ou ajoute-le ici. Exemple : mon process vidéo recrutement : je repère les annonces, j'appelle, je propose un devis, je tourne, je livre."
+      : 'Utilise le bouton « + Ajouter » pour commencer à construire ta mémoire opérationnelle.';
+    el.innerHTML = ordered.length ? ordered.map(template).join('') : `<div class="blank-state"><span>—</span><strong>${empty}</strong><p>${hint}</p></div>`;
+  }
   function fields(type) {
-    if(type==='client') return `<div class="field"><label>Nom / entreprise</label><input name="name" required placeholder="Ex. Premier client"></div><div class="field"><label>Statut</label><select name="status"><option>prospect</option><option>rdv</option><option>proposition</option><option>client</option><option>perdu</option></select></div><div class="field"><label>Valeur potentielle (€)</label><input name="value" type="number" min="0" placeholder="Ex. 600"></div><div class="field"><label>Prochaine action / échéance</label><input name="nextAction" placeholder="Ex. Relancer vendredi"></div><div class="field"><label>Note</label><textarea name="note" placeholder="Besoin, offre, contexte..."></textarea></div>`;
-    if(type==='settings') return `<div class="field"><label>Objectif CA mensuel (€)</label><input name="revenueTarget" type="number" min="0" value="${state.settings?.revenueTarget || 10000}" required></div><div class="field"><label>Objectif épargne (€)</label><input name="savingsTarget" type="number" min="0" value="${state.settings?.savingsTarget || 2000}" required></div><div class="field"><label>Épargne actuelle (€)</label><input name="savings" type="number" min="0" value="${state.savings || 0}" required></div>`
-    if(type==='process') return `<div class="field"><label>Nom du process</label><input name="title" required placeholder="Ex. Onboarding client"></div><div class="field"><label>Étapes / description</label><textarea name="description" required placeholder="1. ...&#10;2. ...&#10;3. ..."></textarea></div>`;
-    return `<div class="field"><label>Titre</label><input name="title" required placeholder="Décision, apprentissage ou erreur"></div><div class="field"><label>Contenu</label><textarea name="body" required placeholder="Ce qui s'est passé, ce que j'ai appris, ce que je change..."></textarea></div>`;
+      if(type==='client') return `<div class="field"><label>Nom / entreprise</label><input name="name" required placeholder="Ex. Premier client"></div><div class="field"><label>Statut</label><select name="status"><option>prospect</option><option>rdv</option><option>proposition</option><option>client</option><option>perdu</option></select></div><div class="field"><label>Valeur potentielle (€)</label><input name="value" type="number" min="0" placeholder="Ex. 600"></div><div class="field"><label>Prochaine action / échéance</label><input name="nextAction" placeholder="Ex. Relancer vendredi"></div><div class="field"><label>Note</label><textarea name="note" placeholder="Besoin, offre, contexte..."></textarea></div>`;
+      if(type==='source') return `<div class="field"><label>Nom de la source</label><input name="name" required placeholder="Ex. Apify Industrie Tours"></div><div class="field"><label>Type</label><select name="type"><option value="apify">Apify (scraping annonces)</option><option value="linkedin">LinkedIn</option><option value="referral">Recommandation</option><option value="cold">Cold outreach</option><option value="autre">Autre</option></select></div><div class="field"><label>Config (JSON)</label><textarea name="config" placeholder='{"secteur": "industrie", "ville": "Tours", "sites": ["france-travail", "indeed", "hellowork"]}'></textarea></div>`;
+      if(type==='activity') return `<div class="field"><label>Date (YYYY-MM-DD)</label><input name="date" type="date" required></div><div class="field"><label>Source</label><select name="source_id"><option value="">— Aucune —</option>${(state.sources || []).map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></div><div class="field"><label>Contact (optionnel)</label><select name="contact_id"><option value="">— Aucun —</option>${(state.clients || []).map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></div><div class="field"><label>Canal</label><select name="channel"><option value="appel">Appel</option><option value="visite">Visite physique</option><option value="email">Email</option><option value="linkedin">LinkedIn</option><option value="sms">SMS</option><option value="autre">Autre</option></select></div><div class="field"><label>Résultat</label><select name="outcome"><option value="pas_de_reponse">Pas de réponse</option><option value="refus">Refus</option><option value="rdv">RDV obtenu</option><option value="devis_envoye">Devis envoyé</option><option value="signe">Signé</option><option value="perdu">Perdu</option><option value="a_relancer">À relancer</option></select></div><div class="field"><label>Durée (min)</label><input name="duration_min" type="number" min="0" placeholder="Ex. 15"></div><div class="field"><label>Note</label><textarea name="note" placeholder="Contexte, objection, prochaine étape..."></textarea></div>`;
+      if(type==='settings') return `<div class="field"><label>Objectif CA mensuel (€)</label><input name="revenueTarget" type="number" min="0" value="${state.settings?.revenueTarget || 10000}" required></div><div class="field"><label>Objectif épargne (€)</label><input name="savingsTarget" type="number" min="0" value="${state.settings?.savingsTarget || 2000}" required></div><div class="field"><label>Épargne actuelle (€)</label><input name="savings" type="number" min="0" value="${state.savings || 0}" required></div>`
+      if(type==='process') return `<div class="field"><label>Nom du process</label><input name="title" required placeholder="Ex. Onboarding client"></div><div class="field"><label>Étapes / description</label><textarea name="description" required placeholder="1. ...\n2. ...\n3. ..."></textarea></div>`;
+      return `<div class="field"><label>Titre</label><input name="title" required placeholder="Décision, apprentissage ou erreur"></div><div class="field"><label>Contenu</label><textarea name="body" required placeholder="Ce qui s'est passé, ce que j'ai appris, ce que je change..."></textarea></div>`;
   }
   let activeType;
   document.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => { activeType=btn.dataset.open.replace('-form',''); $('dialog-title').textContent=activeType==='client'?'Nouveau contact':activeType==='process'?'Nouveau process':activeType==='settings'?'Objectifs Business':'Nouvelle note'; $('dialog-fields').innerHTML=fields(activeType); $('entry-dialog').showModal(); }));
@@ -224,6 +272,20 @@
         if (!response.ok) throw new Error(`API ${response.status}`);
         const result = await response.json();
         state.clients.push(result.contact || data);
+      }
+      if (activeType === 'source') {
+        const config = data.config ? JSON.parse(data.config) : {};
+        const response = await api('/business/sources', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: data.name, type: data.type, config, is_active: true }) });
+        if (!response.ok) throw new Error(`API ${response.status}`);
+        const result = await response.json();
+        state.sources = state.sources || [];
+        state.sources.push(result.sourceRecord || { name: data.name, type: data.type, config });
+      }
+      if (activeType === 'activity') {
+        const response = await api('/business/activities', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ date: data.date, source_id: data.source_id || null, contact_id: data.contact_id || null, channel: data.channel, outcome: data.outcome, duration_min: data.duration_min ? Number(data.duration_min) : null, note: data.note, metadata: {} }) });
+        if (!response.ok) throw new Error(`API ${response.status}`);
+        const result = await response.json();
+        // Activities are loaded via /business/activities endpoint, not stored in local state
       }
       if (activeType === 'process') {
         const response = await api('/business/process', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ title: data.title, description: data.description, source: 'web' }) });
@@ -277,6 +339,8 @@
   loadJournal();
   loadTrends();
   loadIntegrations();
+  loadSources();
+  loadActivities();
   $('export-button').addEventListener('click', () => { const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`lifeos-business-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(a.href); });
   render();
 })();

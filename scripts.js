@@ -1,7 +1,7 @@
 /* LifeOS — synthèse personnelle. Une donnée absente n'est jamais convertie en zéro. */
 (() => {
   const API_BASE = (window.API_BASE || '/api').replace(/\/$/, '');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date());
   const $ = (id) => document.getElementById(id);
   const value = (object, key) => object && object[key] !== undefined && object[key] !== null ? object[key] : null;
   const fmt = (number, digits = 0) => number === null ? '—' : Number(number).toLocaleString('fr-FR', { maximumFractionDigits: digits });
@@ -98,12 +98,16 @@
     const stats = data.stats || {};
     setText('protein-today', stats.protein === undefined ? '—' : fmt(stats.protein));
     setText('carbs-today', stats.carbs === undefined ? '—' : fmt(stats.carbs));
+    setText('fat-today', stats.fat === undefined ? '—' : fmt(stats.fat));
     setText('cals-today', stats.calories === undefined ? '—' : fmt(stats.calories));
-    setBar('protein-bar', stats.protein, 150); setBar('carbs-bar', stats.carbs, 250); setBar('calories-bar', stats.calories, 2200);
+    setBar('protein-bar', stats.protein, 150); setBar('carbs-bar', stats.carbs, 250); setBar('fat-bar', stats.fat, 80); setBar('calories-bar', stats.calories, 2200);
     const meals = data.meals || [];
     const list = $('history-list');
-    if (!meals.length) { list.innerHTML = '<div class="empty-state"><span>○</span><strong>Aucun repas pour le moment</strong><p>Envoie une photo à <b>@lifeos22_bot</b> et elle apparaîtra ici.</p></div>'; return; }
-    list.innerHTML = meals.map((meal) => `<article class="meal-row"><div class="meal-photo">${meal.photo_url ? `<img src="${esc(meal.photo_url)}" alt="Photo du repas" loading="lazy">` : '◌'}</div><div><div class="meal-name">${esc(meal.name || meal.meal_type || 'Repas')}</div><div class="meal-time">${meal.createdAt ? new Date(meal.createdAt).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : 'Aujourd’hui'}</div></div><div class="meal-macros"><span><b>${fmt(meal.protein_g)}</b> pro</span><span><b>${fmt(meal.carbs_g)}</b> gluc.</span><span><b>${fmt(meal.calories)}</b> kcal</span></div><div class="quality">${esc(meal.quality || 'à confirmer')}</div></article>`).join('');
+    if (!meals.length) { list.innerHTML = '<div class="empty-state"><span>○</span><strong>Aucun repas pour le moment</strong><p>Envoie une photo à Hermes. Seuls le nom et les macros apparaissent ici, jamais l’image.</p></div>'; return; }
+    list.innerHTML = meals.map((meal) => {
+      const created = meal.created_at || meal.createdAt;
+      return `<article class="meal-row"><div class="meal-macros-only"><div class="meal-name">${esc(meal.name || meal.meal_type || 'Repas')}</div><div class="meal-time">${created ? new Date(created).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : 'Aujourd’hui'}</div></div><div class="meal-macros"><span><b>${fmt(meal.protein_g)}</b> pro</span><span><b>${fmt(meal.carbs_g)}</b> gluc.</span><span><b>${fmt(meal.fat_g)}</b> lip.</span><span><b>${fmt(meal.calories)}</b> kcal</span></div><div class="quality">${esc(meal.quality || 'à confirmer')}</div></article>`;
+    }).join('');
   }
 
   function esc(v) { return String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
@@ -122,7 +126,7 @@
       console.warn('LifeOS : synchronisation impossible', error);
     }
   }
-  $('refresh-button').addEventListener('click', refresh);
+  $('refresh-button')?.addEventListener('click', refresh);
   refresh();
   window.setInterval(refresh, 30000);
 })();

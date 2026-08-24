@@ -1,3 +1,6 @@
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '.env'), override: true });
 const express = require('express');
 const cors = require('cors');
 const { readState, updateState } = require('./store');
@@ -41,7 +44,142 @@ app.get('/', (req, res) => {
 });
 
 app.get('/status', (req, res) => {
-    res.json({ online: true });
+    res.json({ online: true, agent: 'hermes', channel: 'telegram' });
+});
+
+function todayInParis() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date());
+}
+
+function pick(source, keys) {
+    for (const key of keys) {
+        if (source[key] !== undefined && source[key] !== null && source[key] !== '') return source[key];
+    }
+    return undefined;
+}
+
+function stripMealPhotos(metadata = {}) {
+    const clean = { ...metadata };
+    for (const key of Object.keys(clean)) {
+        if (/photo|image|file_id|fileid|thumbnail|caption/i.test(key)) delete clean[key];
+    }
+    return clean;
+}
+
+function mealFat(meal) {
+    return Number(meal.fat_g ?? meal.lipides ?? meal.metadata?.fat_g ?? meal.metadata?.lipides) || 0;
+}
+
+function sanitizeMeal(meal) {
+    return {
+        date: meal.date,
+        meal_type: meal.meal_type,
+        protein_g: Number(meal.protein_g) || 0,
+        carbs_g: Number(meal.carbs_g) || 0,
+        fat_g: mealFat(meal),
+        calories: Number(meal.calories) || 0,
+        quality: meal.quality || 'non précisée',
+        source: meal.source || 'hermes',
+        created_at: meal.created_at || meal.createdAt || null
+    };
+}
+
+function normalizeMeal(body = {}) {
+    const quality = String(pick(body, ['quality', 'qualité', 'qualite']) || 'estimee').trim();
+    const fat_g = Number(pick(body, ['fat_g', 'fat', 'lipides', 'lipids'])) || 0;
+    return {
+        date: String(pick(body, ['date']) || todayInParis()),
+        meal_type: String(pick(body, ['meal_type', 'type', 'name']) || 'custom').trim().slice(0, 80),
+        protein_g: Number(pick(body, ['protein_g', 'protein', 'protéines', 'proteines'])) || 0,
+        carbs_g: Number(pick(body, ['carbs_g', 'carbs', 'glucides'])) || 0,
+        fat_g,
+        calories: Number(pick(body, ['calories', 'kcal'])) || 0,
+        quality,
+        source: String(pick(body, ['source']) || 'hermes'),
+        metadata: stripMealPhotos({
+            ...(body.metadata && typeof body.metadata === 'object' ? body.metadata : {}),
+            fat_g
+        })
+    };
+}
+
+async function loadLifeosBriefing(requestedDate) {
+    const exportUrl = process.env.LIFEOS_IA_URL || 'https://habit-track-xi.vercel.app/api/ia?scope=tout';
+    const isIaPayload = exportUrl.includes('/api/ia');
+    const response = await fetch(exportUrl, { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error(`LifeOS ${response.status}`);
+    const payload = await response.json();
+    const sourceDays = isIaPayload
+        ? ((payload.mois && payload.mois.jours) || (payload.semaine && payload.semaine.jours) || [])
+        : (Array.isArray(payload.recentDays) ? payload.recentDays : []);
+    const normalize = day => isIaPayload ? {
+        date: day.date,
+        sleepHours: day.sommeil,
+        sportMinutes: day.sportMin,
+        workMinutes: day.tafMin,
+        prospectingMinutes: day.businessMin,
+        prospectContacts: day.contacts,
+        newClients: day.clients,
+        moodScore: day.humeur,
+        energyScore: day.energie,
+        stressScore: day.stress,
+        performanceScore: day.score,
+    } : day;
+    const dated = sourceDays.filter(day => day && day.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const selected = dated.find(item => item.date === requestedDate) || dated[0] || {};
+    return { day: normalize(selected), source: isIaPayload ? 'lifeos-ia-api' : 'lifeos-api' };
+}
+
+// Briefing unique pour Hermes : tout ce que l'agent doit lire avant de parler ou d'écrire.
+app.get('/context', async (req, res) => {
+    const today = String(req.query.date || todayInParis());
+    const [integrations, contacts, processes, settings, advice, journal, mealsForDay] = await Promise.all([
+        readIntegrations(),
+        businessStore.list(businessStore.TABLES.contacts).catch(() => null),
+        businessStore.list(businessStore.TABLES.processes).catch(() => null),
+        businessStore.list(businessStore.TABLES.settings).catch(() => null),
+        supabaseStore.list(supabaseStore.TABLES.advice, { limit: 5 }).catch(() => null),
+        supabaseStore.list(supabaseStore.TABLES.journal, { limit: 5 }).catch(() => null),
+        supabaseStore.list(supabaseStore.TABLES.meals, { date: today, limit: 20 }).catch(() => null)
+    ]);
+    let lifeos = null;
+    try {
+        lifeos = await loadLifeosBriefing(today);
+    } catch (error) {
+        lifeos = { error: error.message };
+    }
+    const gmail = integrations.gmail || {};
+    const calendar = integrations.calendar || {};
+    const activitywatch = integrations.activitywatch || {};
+    return res.json({
+        agent: 'hermes',
+        role: 'Couche agentique. Les programmes capturent et stockent. Hermes interprète, questionne, décide, puis écrit la mémoire.',
+        today,
+        north_star: { monthly_revenue: 10000, savings: 2000, exit: 'Subway' },
+        lifeos,
+        business: {
+            contacts: (contacts || []).slice(0, 20),
+            processes: (processes || []).slice(0, 20),
+            metrics: computeBusinessMetrics(contacts || []),
+            settings: settings?.[0] || null
+        },
+        integrations: {
+            gmail: { summary: gmail.summary || {}, items: gmail.items || [] },
+            calendar: { summary: calendar.summary || {}, items: calendar.items || [] },
+            activitywatch: { summary: activitywatch.summary || {} }
+        },
+        advice: advice || adviceEntries.slice(-5).reverse(),
+        journal: journal || journalEntries.slice(-5).reverse(),
+        meals: (mealsForDay || meals.filter(meal => meal.date === today)).map(sanitizeMeal),
+        channel: 'telegram',
+        write: {
+            advice: `POST ${publicOrigin}/api/advice`,
+            journal: `POST ${publicOrigin}/api/journal`,
+            contact: `POST ${publicOrigin}/api/business/contact`,
+            process: `POST ${publicOrigin}/api/business/process`,
+            meal: `POST ${publicOrigin}/api/meal`
+        }
+    });
 });
 
 function hasSyncAccess(req) {
@@ -134,7 +272,7 @@ app.get('/dashboard', async (req, res) => {
             summary: { ...period, averages7d: averages },
             screen: { available: false, reason: 'Screen Time doit être connecté côté source de données.' },
             google: {
-                email_count: gmail.summary?.email_count_30d ?? 0,
+                email_count: gmail.summary?.email_count_30d ?? gmail.summary?.email_count ?? 0,
                 calendar_events_count: calendar.summary?.event_count_today ?? 0,
                 available: isConnected(gmail) || isConnected(calendar)
             },
@@ -143,6 +281,7 @@ app.get('/dashboard', async (req, res) => {
                 available: isConnected(activitywatch)
             },
             source: isIaPayload ? 'lifeos-ia-api' : 'lifeos-api',
+            agent: 'hermes',
         });
     } catch (error) {
         res.status(502).json({ error: 'Impossible de récupérer LifeOS', detail: error.message });
@@ -206,11 +345,11 @@ app.get('/advice', async (req, res) => {
 app.post('/advice', async (req, res) => {
     const body = req.body || {};
     const date = body.date;
-    const diagnosis = body.diagnosis || body.diagnosis || body.diagnostic;
-    const lever = body.lever || body.lever;
-    const action = body.action || body.action;
-    const domain = body.domain || body.domain || 'business';
-    const priority = body.priority || body.priority || 'normal';
+    const diagnosis = body.diagnosis || body.diagnostic;
+    const lever = body.lever || body.levier;
+    const action = body.action;
+    const domain = body.domain || body.domaine || 'business';
+    const priority = body.priority || body.priorite || 'normal';
     const source = body.source || 'hermes';
     if (!date || !diagnosis || !action) {
         return res.status(400).json({ error: 'date, diagnosis et action sont requis' });
@@ -241,12 +380,13 @@ app.post('/advice', async (req, res) => {
 // Business OS : source persistante unique (Supabase si configuré, local sinon).
 app.get('/business/state', async (req, res) => {
     try {
-        const [contacts, processes, settings] = await Promise.all([
+        const [contacts, processes, settings, sources] = await Promise.all([
             businessStore.list(businessStore.TABLES.contacts),
             businessStore.list(businessStore.TABLES.processes),
-            businessStore.list(businessStore.TABLES.settings)
+            businessStore.list(businessStore.TABLES.settings),
+            businessStore.listSources({ is_active: true })
         ]);
-        if (contacts || processes || settings) {
+        if (contacts || processes || settings || sources) {
             const integrations = await readIntegrations();
             const gmail = integrations.gmail || {};
             const calendar = integrations.calendar || {};
@@ -256,17 +396,19 @@ app.get('/business/state', async (req, res) => {
                 contacts: contacts || [],
                 processes: processes || [],
                 settings: settings?.[0] || null,
+                sources: sources || [],
                 metrics: computeBusinessMetrics(contacts || []),
                 connections: {
                     supabase: true,
                     lifeos: true,
+                    hermes: true,
                     telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN),
                     google: isConnected(gmail) || isConnected(calendar),
                     activitywatch: isConnected(activitywatch)
                 }
             });
         }
-        return res.json({ source: 'local', contacts: [], processes: [], settings: null });
+        return res.json({ source: 'local', contacts: [], processes: [], settings: null, sources: [] });
     } catch (error) {
         return res.status(502).json({ error: 'Lecture Business OS impossible', detail: error.message });
     }
@@ -303,13 +445,70 @@ app.put('/business/settings', async (req, res) => {
     } catch (error) { return res.status(502).json({ error: 'Enregistrement objectifs impossible', detail: error.message }); }
 });
 
+// Sources de prospection
+app.get('/business/sources', async (req, res) => {
+    try {
+        const sources = await businessStore.listSources({ type: req.query.type, is_active: req.query.is_active === 'true' ? true : req.query.is_active === 'false' ? false : undefined });
+        return res.json({ sources: sources || [], source: sources ? 'supabase' : 'local' });
+    } catch (error) { return res.status(502).json({ error: 'Lecture sources impossible', detail: error.message }); }
+});
+
+app.post('/business/sources', async (req, res) => {
+    const { name, type, config = {}, is_active = true } = req.body || {};
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'Nom requis' });
+    if (!['apify', 'linkedin', 'referral', 'cold', 'autre'].includes(type)) return res.status(400).json({ error: 'Type invalide' });
+    try {
+        const remote = await businessStore.saveSource({ name: String(name).trim(), type, config, is_active });
+        return res.status(201).json({ success: true, source: 'supabase', sourceRecord: remote });
+    } catch (error) { return res.status(502).json({ error: 'Enregistrement source impossible', detail: error.message }); }
+});
+
+app.post('/business/sources/:id/run', async (req, res) => {
+    const { leadsFound = 0 } = req.body || {};
+    try {
+        const remote = await businessStore.updateSourceRun(req.params.id, { leadsFound: Number(leadsFound) || 0 });
+        return res.json({ success: true, source: 'supabase', sourceRecord: remote });
+    } catch (error) { return res.status(502).json({ error: 'Mise à jour run impossible', detail: error.message }); }
+});
+
+// Activités de prospection
+app.get('/business/activities', async (req, res) => {
+    const { date, from, to, source_id, contact_id, limit = 100 } = req.query;
+    try {
+        const activities = await businessStore.listActivities({ date, from, to, source_id, contact_id, limit: Math.min(Number(limit), 500) });
+        return res.json({ activities: activities || [], source: activities ? 'supabase' : 'local' });
+    } catch (error) { return res.status(502).json({ error: 'Lecture activités impossible', detail: error.message }); }
+});
+
+app.post('/business/activities', async (req, res) => {
+    const { date, source_id, contact_id, channel, outcome, duration_min, note = '', metadata = {} } = req.body || {};
+    if (!isoDate.test(String(date || ''))) return res.status(400).json({ error: 'Date ISO requise' });
+    if (!['appel', 'visite', 'email', 'linkedin', 'sms', 'autre'].includes(channel)) return res.status(400).json({ error: 'Canal invalide' });
+    if (!['pas_de_reponse', 'refus', 'rdv', 'devis_envoye', 'signe', 'perdu', 'a_relancer'].includes(outcome)) return res.status(400).json({ error: 'Résultat invalide' });
+    try {
+        const remote = await businessStore.saveActivity({ date, source_id: source_id || null, contact_id: contact_id || null, channel, outcome, duration_min: duration_min ? Number(duration_min) : null, note: String(note).trim().slice(0, 5000), metadata });
+        return res.status(201).json({ success: true, source: 'supabase', activity: remote });
+    } catch (error) { return res.status(502).json({ error: 'Enregistrement activité impossible', detail: error.message }); }
+});
+
+// Stats de prospection
+app.get('/business/prospecting/stats', async (req, res) => {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: 'from et to requis (ISO date)' });
+    try {
+        const stats = await businessStore.getProspectingStats({ from, to });
+        return res.json({ stats, source: stats ? 'supabase' : 'local' });
+    } catch (error) { return res.status(502).json({ error: 'Calcul stats impossible', detail: error.message }); }
+});
+
 // Repas : Supabase en production, fallback local en développement.
 app.get('/history', async (req, res) => {
     const date = req.query.date;
     if (!date) return res.status(400).json({ error: 'Date requise' });
     try {
         const remote = await supabaseStore.list(supabaseStore.TABLES.meals, { date, limit: 100 });
-        return res.json({ meals: remote || meals.filter(meal => meal.date === date), source: remote ? 'supabase' : 'local' });
+        const rows = remote || meals.filter(meal => meal.date === date);
+        return res.json({ meals: rows.map(sanitizeMeal), source: remote ? 'supabase' : 'local' });
     } catch (error) { return res.status(502).json({ error: 'Lecture repas impossible', detail: error.message }); }
 });
 
@@ -325,18 +524,10 @@ app.get('/stats/today', async (req, res) => {
 
 // Post a meal (receives from Telegram webhook or direct POST)
 app.post('/meal', async (req, res) => {
-    const meal = req.body || {};
-    if (!isoDate.test(String(meal.date || '')) || !meal.meal_type || !meal.quality) {
-        return res.status(400).json({ error: 'Date ISO, type et qualité requis' });
+    const meal = normalizeMeal(req.body || {});
+    if (!isoDate.test(meal.date)) {
+        return res.status(400).json({ error: 'Date ISO requise (YYYY-MM-DD)' });
     }
-    
-    // Ensure protein/carbs are numbers
-    meal.protein_g = Number(meal.protein_g) || 0;
-    meal.carbs_g = Number(meal.carbs_g) || 0;
-    meal.calories = Number(meal.calories) || 0;
-    
-    // Add timestamp
-    meal.createdAt = new Date();
     
     try {
         const remote = await supabaseStore.saveMeal(meal);
@@ -348,9 +539,8 @@ app.post('/meal', async (req, res) => {
     } catch (error) { return res.status(502).json({ error: 'Enregistrement repas impossible', detail: error.message }); }
 });
 
-const { parseProcess } = require('./process-sense');
-
-// Telegram webhook endpoint — saisie naturelle : process, journal, conseil
+// Fallback seulement. Hermes Gateway consomme Telegram en premier.
+// Ne pas setWebhook vers Vercel tant que la Gateway locale tourne.
 app.post('/telegram-webhook', async (req, res) => {
     const update = req.body;
     if (!update.message || !update.message.text) {
@@ -362,92 +552,20 @@ app.post('/telegram-webhook', async (req, res) => {
     const text = message.text.trim();
     if (!chatId || !text) return res.status(200).json({ ok: true });
 
-    // Format attendu dans Telegram pour un process
-    // Ex: "Mon process pour la vidéo de recrutement: repère les annonces → appelle → propose → tourne → livre"
-    if (text.startsWith('/process') || /\b(mon process|process pour|méthode|procédure|workflow)\b/i.test(text)) {
-        const cleanText = text.replace(/^\s*(mon process|process|méthode|workflow)\s*[:\-]?\s*/i, '').trim();
-        const parsed = parseProcess(cleanText || text);
-
-        // Confirmation envoyée à l'utilisateur sur Telegram
-        const inform = () => {
-            let note;
-            if (parsed.valid) {
-                note = `✅ **Ton process est noté** : 
-${parsed.steps.join('\n' )};
-enrichissant Business OS...`;
-            } else {
-                note = `💬 J'ai bien noté ton process, mais il me manque des étapes. Peux-tu préciser par exemple : 
-"/process ma méthode pour faire une vidéo de recrutement : repérer les annonces sur Indeed, appeler l'entreprise..."`;
-            }
-            fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: chatId, text: note })
-            });
-        };
-
-        if (!parsed.valid) {
-            inform();
-            return res.status(200).json({ ok: true });
-        }
-
-        try {
-            const response = await fetch(`https://life-tracker-site.vercel.app/api/process`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: parsed.title,
-                    description: parsed.description,
-                    steps: parsed.steps,
-                    category: parsed.category,
-                    source: 'telegram'
-                })
-            });
-            const remote = await response.json();
-            if (!response.ok) throw new Error(remote.error);
-
-            inform();
-            return res.status(201).json({ success: true, process: remote });
-        } catch (error) {
-            console.error('Erreur webhook → process :', error);
-            fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: chatId, text: `⚠️ Impossible d'enregistrer pour le moment : ${error.message}` })
-            });
-            return res.status(500).json({ error: error.message });
-        }
+    // /conseil et /process sont des compétences Hermes, pas ce fallback.
+    if (/^\/(conseil|process)\b/i.test(text)) {
+        return res.status(200).json({ ok: true, delegated: 'hermes-gateway' });
     }
 
-    return res.status(200).json({ ok: true });
-});
-    const update = req.body;
-    
-    if (!update.message) {
-        return res.status(200).json({ ok: true });
-    }
-    
-    const message = update.message;
-    const chatId = message.chat?.id;
-    const text = typeof message.text === 'string' ? message.text : '';
-    if (!chatId || !text) return res.status(200).json({ ok: true });
-    
-    // Parse commands from user
     if (text.startsWith('/track')) {
-        // Format: /track protéines=35 glucides=45 calories=650 qualité=bon
         const parts = text.substring(7).trim().split(' ');
         const data = {};
-        
         for (const part of parts) {
             const [key, ...valueParts] = part.split('=');
-            if (key && valueParts.length > 0) {
-                data[key] = valueParts.join('=');
-            }
+            if (key && valueParts.length > 0) data[key] = valueParts.join('=');
         }
-        
-        // Required fields
-        if (!data.protein_g || !data.carbs_g || !data.calories || !data.quality) {
-            // Send error back to user
+        const meal = normalizeMeal({ ...data, source: 'telegram' });
+        if (!meal.protein_g && !meal.carbs_g && !meal.calories) {
             fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -458,19 +576,6 @@ enrichissant Business OS...`;
             });
             return res.status(200).json({ ok: true });
         }
-        
-        // Create meal object
-        const meal = {
-            date: new Date().toISOString().split('T')[0],
-            meal_type: 'custom',
-            protein_g: Number(data.protein_g),
-            carbs_g: Number(data.carbs_g),
-            calories: Number(data.calories),
-            quality: data.quality,
-            source: 'telegram'
-        };
-        
-        // Store
         try {
             const remote = await supabaseStore.saveMeal(meal);
             if (!remote) {
@@ -481,8 +586,6 @@ enrichissant Business OS...`;
         } catch (error) {
             return res.status(502).json({ ok: false, error: 'Enregistrement repas impossible' });
         }
-        
-        // Confirm to user
         fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -491,9 +594,10 @@ enrichissant Business OS...`;
                 text: `✅ Repas enregistré : ${data.protein_g}g pro, ${data.carbs_g}g glucides, ${data.calories} kcal, qualité ${data.quality}`
             })
         });
+        return res.status(200).json({ ok: true });
     }
-    
-    res.json({ ok: true });
+
+    return res.status(200).json({ ok: true });
 });
 
 // Get aggregated stats (week, month)

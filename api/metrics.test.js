@@ -35,9 +35,9 @@ test('la conversion utilise uniquement les résultats connus', () => {
 test('les agrégats repas additionnent les valeurs persistées', () => {
   const { aggregateMeals } = require('./metrics');
   assert.deepEqual(aggregateMeals([
-    { protein_g: 20, carbs_g: 35, calories: 420 },
-    { protein_g: 15, carbs_g: 10, calories: 250 }
-  ]), { protein: 35, carbs: 45, calories: 670, count: 2 });
+    { protein_g: 20, carbs_g: 35, fat_g: 12, calories: 420 },
+    { protein_g: 15, carbs_g: 10, metadata: { fat_g: 8 }, calories: 250 }
+  ]), { protein: 35, carbs: 45, fat: 20, calories: 670, count: 2 });
 });
 
 test('les tendances conservent null et trient les jours', () => {

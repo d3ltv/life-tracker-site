@@ -739,10 +739,10 @@ button {
 
 .meal-row {
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 11px;
-  min-height: 86px;
+  min-height: 76px;
   padding: 12px 14px;
   border-bottom: 1px solid #e8e8ed;
 }
@@ -781,8 +781,9 @@ button {
 }
 
 .meal-macros {
-  display: none;
-  gap: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .meal-macros b {
@@ -1020,7 +1021,7 @@ footer {
   }
 
   .meal-row {
-    grid-template-columns: 54px minmax(0, 1.2fr) minmax(0, 1fr) 100px;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 100px;
     gap: 17px;
     padding: 13px 22px;
   }
