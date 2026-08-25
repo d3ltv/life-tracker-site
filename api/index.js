@@ -6,10 +6,11 @@ const cors = require('cors');
 const { readState, updateState } = require('./store');
 const supabaseStore = require('./supabase_store');
 const businessStore = require('./business_store');
-const { computeBusinessMetrics, buildLifeTrends, aggregateMeals } = require('./metrics');
+const { computeBusinessMetrics, buildLifeTrends, buildFeelAverages, aggregateMeals, buildPeriodRollup, daysEndingOn, upcomingActions, buildPattern } = require('./metrics');
 const integrationStore = require('./integration_store');
-const { pickLifeosDay, normalizeIaDay } = require('./lifeos_sync');
+const { pickLifeosDay, normalizeIaDay, normalizeInsights } = require('./lifeos_sync');
 const lifeosDayStore = require('./lifeos_day_store');
+const { syncBusinessFromLifeosDay } = require('./lifeos_business_sync');
 const app = express();
 const port = process.env.PORT || 3000;
 const publicOrigin = process.env.PUBLIC_ORIGIN || 'https://life-tracker-site.vercel.app';
@@ -42,6 +43,9 @@ app.use((req, res, next) => {
 
 // Health check
 app.get('/', (req, res) => {
+    if (String(req.get('accept') || '').includes('text/html')) {
+        return res.sendFile(path.join(__dirname, '..', 'index.html'));
+    }
     res.json({ status: 'ok', message: 'Life Tracker API' });
 });
 
@@ -111,18 +115,28 @@ async function loadLifeosBriefing(requestedDate) {
     const ingested = await lifeosDayStore.read(requestedDate).catch(() => null);
     const response = await fetch(exportUrl, { headers: { Accept: 'application/json', 'Cache-Control': 'no-store' } });
     if (!response.ok) {
-        if (ingested) return { day: normalizeIaDay(ingested), source: 'lifeos-push' };
+        if (ingested) {
+            return {
+                day: normalizeIaDay(ingested),
+                insights: normalizeInsights({}, ingested.insights),
+                source: 'lifeos-push'
+            };
+        }
         throw new Error(`LifeOS ${response.status}`);
     }
     const payload = await response.json();
     if (isIaPayload) {
-        const { day } = pickLifeosDay(payload, requestedDate, ingested);
-        return { day, source: ingested ? 'lifeos-push' : 'lifeos-ia-api' };
+        const { day, insights } = pickLifeosDay(payload, requestedDate, ingested);
+        return { day, insights, source: ingested ? 'lifeos-push' : 'lifeos-ia-api' };
     }
     const sourceDays = Array.isArray(payload.recentDays) ? payload.recentDays : [];
     const dated = sourceDays.filter(day => day && day.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
     const selected = dated.find(item => item.date === requestedDate) || ingested || dated[0] || {};
-    return { day: normalizeIaDay(selected), source: ingested ? 'lifeos-push' : 'lifeos-api' };
+    return {
+        day: normalizeIaDay(selected),
+        insights: normalizeInsights(payload, ingested?.insights),
+        source: ingested ? 'lifeos-push' : 'lifeos-api'
+    };
 }
 
 // Briefing unique pour Hermes : tout ce que l'agent doit lire avant de parler ou d'écrire.
@@ -146,6 +160,11 @@ app.get('/context', async (req, res) => {
     const gmail = integrations.gmail || {};
     const calendar = integrations.calendar || {};
     const activitywatch = integrations.activitywatch || {};
+    const settingsRow = settings?.[0] || null;
+    const businessSettings = {
+        revenueTarget: settingsRow?.revenue_target,
+        pricePerDeal: settingsRow?.price_per_deal
+    };
     return res.json({
         agent: 'hermes',
         role: 'Couche agentique. Les programmes capturent et stockent. Hermes interprète, questionne, décide, puis écrit la mémoire.',
@@ -155,8 +174,8 @@ app.get('/context', async (req, res) => {
         business: {
             contacts: (contacts || []).slice(0, 20),
             processes: (processes || []).slice(0, 20),
-            metrics: computeBusinessMetrics(contacts || []),
-            settings: settings?.[0] || null
+            metrics: computeBusinessMetrics(contacts || [], new Date(), businessSettings),
+            settings: settingsRow
         },
         integrations: {
             gmail: { summary: gmail.summary || {}, items: gmail.items || [] },
@@ -171,8 +190,15 @@ app.get('/context', async (req, res) => {
             advice: `POST ${publicOrigin}/api/advice`,
             journal: `POST ${publicOrigin}/api/journal`,
             contact: `POST ${publicOrigin}/api/business/contact`,
+            contact_update: `PATCH ${publicOrigin}/api/business/contact/:id`,
             process: `POST ${publicOrigin}/api/business/process`,
+            settings: `PUT ${publicOrigin}/api/business/settings`,
             meal: `POST ${publicOrigin}/api/meal`
+        },
+        vocabulary: {
+            price_per_deal: 'Prix réel d\'une offre (vidéo / pack), en euros. Tant que tu ne l\'as pas tranché, laisse-le vide plutôt que de deviner. À écrire via PUT /business/settings { pricePerDeal }.',
+            payment_status: 'Sur un contact : "du" (rien reçu), "facture" (envoyée, pas encaissée), "encaisse" (argent reçu). À écrire via PATCH /business/contact/:id { paymentStatus, paidAmount, paidAt }.',
+            process_status: 'Sur un process : "brouillon", "actif", "a_revoir" (amélioration identifiée), "archive". À écrire via POST /business/process { title, description, status }.'
         }
     });
 });
@@ -219,10 +245,19 @@ app.get('/integrations/latest', async (req, res) => {
 app.post('/lifeos/ingest', async (req, res) => {
     if (!hasSyncAccess(req)) return res.status(401).json({ error: 'Non autorisé' });
     const day = req.body?.day && typeof req.body.day === 'object' ? req.body.day : req.body;
+    const insights = req.body?.insights && typeof req.body.insights === 'object' ? req.body.insights : null;
     if (!day?.date || !isoDate.test(String(day.date))) return res.status(400).json({ error: 'Jour invalide' });
     try {
-        const saved = await lifeosDayStore.save(day);
-        return res.json({ success: true, date: saved.date || day.date });
+        const saved = await lifeosDayStore.save(day, insights);
+        const business = await syncBusinessFromLifeosDay(day).catch((error) => {
+            console.error('sync business habit-track', error.message);
+            return { created: [], error: error.message };
+        });
+        return res.json({
+            success: true,
+            date: saved.date || day.date,
+            business
+        });
     } catch (error) {
         return safeError(res, 400, 'Ingest LifeOS impossible', error);
     }
@@ -244,10 +279,15 @@ app.get('/dashboard', async (req, res) => {
             : (() => {
                 const sourceDays = Array.isArray(payload.recentDays) ? payload.recentDays : [];
                 const selected = sourceDays.find(item => item.date === requestedDate) || ingested || sourceDays[0] || {};
-                return { rawDays: sourceDays, day: normalizeIaDay(selected) };
+                return {
+                    rawDays: sourceDays,
+                    day: normalizeIaDay(selected),
+                    insights: normalizeInsights(payload, ingested?.insights)
+                };
             })();
         const day = picked.day;
         const sourceDays = picked.rawDays;
+        const insights = picked.insights || normalizeInsights(payload, ingested?.insights);
         const period = isIaPayload ? {
             daysWithData: payload.mois?.joursNotes || sourceDays.length,
             daysWithSleep: sourceDays.filter(item => (item.sommeil ?? item.sleepHours) != null).length,
@@ -257,17 +297,52 @@ app.get('/dashboard', async (req, res) => {
             sleepHours: payload.mois?.tuiles?.find(x => x.label === 'Sommeil')?.value ?? null,
             performanceScore: payload.mois?.scoreMoyen ?? null,
         } : ((payload.computedSummary || {}).averages7d || {});
+        const feelWeek = buildFeelAverages(sourceDays, 7);
+        const weekDays = daysEndingOn(sourceDays, requestedDate, 7);
+        const monthDays = daysEndingOn(sourceDays, requestedDate, 28);
+        const periods = {
+            day: buildPeriodRollup([day]),
+            week: buildPeriodRollup(weekDays),
+            month: buildPeriodRollup(monthDays)
+        };
         const integrations = await readIntegrations();
         const gmail = integrations.gmail || {};
         const calendar = integrations.calendar || {};
         const activitywatch = integrations.activitywatch || {};
+        const dayFeelSlots = day.dayFeelSlots?.length
+            ? day.dayFeelSlots
+            : (insights.feelSlots || []);
+        const [contacts, businessSettingsRows] = await Promise.all([
+            businessStore.list(businessStore.TABLES.contacts).catch(() => []),
+            businessStore.list(businessStore.TABLES.settings).catch(() => [])
+        ]);
+        const nextActions = upcomingActions(contacts || [], 5);
+        const businessSettingsRow = businessSettingsRows?.[0] || null;
+        const crmMetrics = computeBusinessMetrics(contacts || [], new Date(), {
+            revenueTarget: businessSettingsRow?.revenue_target,
+            pricePerDeal: businessSettingsRow?.price_per_deal
+        });
 
         res.json({
             date: day.date || requestedDate || null,
             lifeos_day: day,
+            insights,
+            sleep_debt: insights.sleepDebt,
+            pipeline: insights.pipeline,
+            signal: insights.signal,
+            engine_cards: insights.cards || [],
+            rest_need: insights.restNeed,
+            drift: insights.drift || [],
+            forecast: insights.forecast,
+            feel_slots: dayFeelSlots,
+            feel_week: feelWeek,
+            periods,
+            next_actions: nextActions,
+            crm: crmMetrics,
             trends: buildLifeTrends(sourceDays, req.query.range || 30),
+            pattern: buildPattern(sourceDays, requestedDate, insights.cards || []),
             targets: (payload.targets || {}).daily || {},
-            summary: { ...period, averages7d: averages },
+            summary: { ...period, averages7d: { ...averages, ...feelWeek } },
             screen: { available: false, reason: 'Screen Time doit être connecté côté source de données.' },
             google: {
                 email_count: gmail.summary?.email_count_30d ?? gmail.summary?.email_count ?? 0,
@@ -389,13 +464,17 @@ app.get('/business/state', async (req, res) => {
             const gmail = integrations.gmail || {};
             const calendar = integrations.calendar || {};
             const activitywatch = integrations.activitywatch || {};
+            const settingsRow = settings?.[0] || null;
             return res.json({
                 source: 'supabase',
                 contacts: contacts || [],
                 processes: processes || [],
-                settings: settings?.[0] || null,
+                settings: settingsRow,
                 sources: sources || [],
-                metrics: computeBusinessMetrics(contacts || []),
+                metrics: computeBusinessMetrics(contacts || [], new Date(), {
+                    revenueTarget: settingsRow?.revenue_target,
+                    pricePerDeal: settingsRow?.price_per_deal
+                }),
                 connections: {
                     supabase: true,
                     lifeos: true,
@@ -412,16 +491,57 @@ app.get('/business/state', async (req, res) => {
     }
 });
 
+const PAYMENT_STATUSES = ['du', 'facture', 'encaisse'];
+
 app.post('/business/contact', async (req, res) => {
-    const { name, status = 'prospect', value = 0, nextAction = '', nextActionAt = null, note = '', source = 'web' } = req.body || {};
+    const { name, status = 'prospect', value = 0, nextAction = '', nextActionAt = null, note = '', source = 'web', paymentStatus = 'du', paidAmount = 0, paidAt = null } = req.body || {};
     if (!name || !String(name).trim()) return res.status(400).json({ error: 'Nom requis' });
     if (!['prospect', 'rdv', 'proposition', 'client', 'perdu'].includes(status)) return res.status(400).json({ error: 'Statut invalide' });
-    const row = { name: String(name).trim().slice(0, 200), status, value: Number(value) || 0, next_action: String(nextAction).trim().slice(0, 500), next_action_at: nextActionAt || null, note: String(note).trim().slice(0, 5000), source };
+    if (!PAYMENT_STATUSES.includes(paymentStatus)) return res.status(400).json({ error: 'Statut de paiement invalide' });
+    const row = {
+        name: String(name).trim().slice(0, 200),
+        status,
+        value: Number(value) || 0,
+        next_action: String(nextAction).trim().slice(0, 500),
+        next_action_at: nextActionAt || null,
+        note: String(note).trim().slice(0, 5000),
+        source,
+        payment_status: paymentStatus,
+        paid_amount: Number(paidAmount) || 0,
+        paid_at: paidAt || null
+    };
     try {
         const remote = await businessStore.insert(businessStore.TABLES.contacts, row);
         if (remote) return res.status(201).json({ success: true, source: 'supabase', contact: remote });
         return res.status(201).json({ success: true, source: 'local', contact: row });
     } catch (error) { return res.status(502).json({ error: 'Enregistrement contact impossible', detail: error.message }); }
+});
+
+// Mise à jour d'un contact existant : statut, encaissement réel, prochaine action.
+// C'est la route que Hermes utilise pour trancher "signé" vs "encaissé" au fil de l'eau.
+app.patch('/business/contact/:id', async (req, res) => {
+    const { status, value, nextAction, nextActionAt, note, paymentStatus, paidAmount, paidAt } = req.body || {};
+    if (status !== undefined && !['prospect', 'rdv', 'proposition', 'client', 'perdu'].includes(status)) {
+        return res.status(400).json({ error: 'Statut invalide' });
+    }
+    if (paymentStatus !== undefined && !PAYMENT_STATUSES.includes(paymentStatus)) {
+        return res.status(400).json({ error: 'Statut de paiement invalide' });
+    }
+    const patch = {};
+    if (status !== undefined) patch.status = status;
+    if (value !== undefined) patch.value = Number(value) || 0;
+    if (nextAction !== undefined) patch.next_action = String(nextAction).trim().slice(0, 500);
+    if (nextActionAt !== undefined) patch.next_action_at = nextActionAt || null;
+    if (note !== undefined) patch.note = String(note).trim().slice(0, 5000);
+    if (paymentStatus !== undefined) patch.payment_status = paymentStatus;
+    if (paidAmount !== undefined) patch.paid_amount = Number(paidAmount) || 0;
+    if (paidAt !== undefined) patch.paid_at = paidAt || null;
+    if (!Object.keys(patch).length) return res.status(400).json({ error: 'Rien à mettre à jour' });
+    try {
+        const remote = await businessStore.updateContact(req.params.id, patch);
+        if (!remote) return res.status(404).json({ error: 'Contact introuvable ou Supabase non configuré' });
+        return res.json({ success: true, source: 'supabase', contact: remote });
+    } catch (error) { return res.status(502).json({ error: 'Mise à jour contact impossible', detail: error.message }); }
 });
 
 app.post('/business/process', async (req, res) => {
@@ -435,11 +555,14 @@ app.post('/business/process', async (req, res) => {
 });
 
 app.put('/business/settings', async (req, res) => {
-    const { revenueTarget = 10000, savingsTarget = 2000, savings = 0 } = req.body || {};
+    const { revenueTarget = 10000, savingsTarget = 2000, savings = 0, pricePerDeal } = req.body || {};
+    const row = { id: true, revenue_target: Number(revenueTarget) || 0, savings_target: Number(savingsTarget) || 0, savings: Number(savings) || 0 };
+    // pricePerDeal reste absent tant que Hermes (ou toi) ne l'a pas tranché : pas de 0 par défaut.
+    if (pricePerDeal !== undefined) row.price_per_deal = pricePerDeal === null || pricePerDeal === '' ? null : Number(pricePerDeal) || null;
     try {
-        const remote = await businessStore.upsert(businessStore.TABLES.settings, { id: true, revenue_target: Number(revenueTarget) || 0, savings_target: Number(savingsTarget) || 0, savings: Number(savings) || 0 });
+        const remote = await businessStore.upsert(businessStore.TABLES.settings, row);
         if (remote) return res.json({ success: true, source: 'supabase', settings: remote });
-        return res.json({ success: true, source: 'local', settings: { revenueTarget, savingsTarget, savings } });
+        return res.json({ success: true, source: 'local', settings: { revenueTarget, savingsTarget, savings, pricePerDeal: row.price_per_deal ?? null } });
     } catch (error) { return res.status(502).json({ error: 'Enregistrement objectifs impossible', detail: error.message }); }
 });
 
@@ -638,6 +761,9 @@ app.get('/stats/month', async (req, res) => {
 // En local, le fichier reste exécutable avec `node api/index.js`.
 // Sur Vercel, l'application est exportée comme fonction serverless.
 if (require.main === module) {
+    const root = path.join(__dirname, '..');
+    app.use(express.static(root, { index: false }));
+    app.get('/business', (_req, res) => res.sendFile(path.join(root, 'business.html')));
     app.listen(port, () => {
         console.log(`📡 Life Tracker API running on port ${port}`);
     });

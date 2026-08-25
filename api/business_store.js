@@ -29,6 +29,20 @@ async function upsert(table, row) {
   return data;
 }
 
+// Mise à jour ciblée d'un contact existant (ex. statut d'encaissement décidé par Hermes).
+async function updateContact(id, patch) {
+  if (!isConfigured()) return null;
+  if (!id) throw new Error('id requis');
+  const { data, error } = await client()
+    .from(TABLES.contacts)
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 // Sources de prospection
 async function listSources({ type, is_active } = {}) {
   if (!isConfigured()) return null;
@@ -127,4 +141,4 @@ async function getProspectingStats({ from, to } = {}) {
   };
 }
 
-module.exports = { TABLES, list, insert, upsert, listSources, saveSource, updateSourceRun, listActivities, saveActivity, getProspectingStats, isConfigured };
+module.exports = { TABLES, list, insert, upsert, updateContact, listSources, saveSource, updateSourceRun, listActivities, saveActivity, getProspectingStats, isConfigured };

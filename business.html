@@ -17,7 +17,6 @@
       <a class="brand" href="/"><span class="brand-mark">L</span><span><strong>lifeos</strong><small>personal intelligence</small></span></a>
       <nav class="nav" aria-label="Navigation principale">
         <a class="nav-item" href="/"><span>◒</span> Vue d'ensemble</a>
-        <a class="nav-item" href="/#nutrition"><span>⌁</span> Nutrition</a>
         <a class="nav-item active" href="/business"><span>↗</span> Business OS</a>
       </nav>
       <div class="sidebar-note"><span class="live-dot"></span><div><strong>Système actif</strong><small>Deuxième cerveau en construction</small></div></div>
@@ -27,56 +26,96 @@
     <main class="content" id="top">
       <header class="topbar">
         <div><p class="eyebrow">BUSINESS OS · V1</p><h1>Construire une entreprise<br><em>qui se souvient.</em></h1></div>
-        <div class="top-actions"><button class="icon-button" id="export-button" title="Exporter les données" aria-label="Exporter les données">↓</button><div class="avatar">M</div></div>
+        <div class="top-actions"><button class="icon-button" id="export-button" title="Exporter les données" aria-label="Exporter les données">↓</button></div>
       </header>
 
-      <section class="business-intro">
-        <div><p class="eyebrow">NORTH STAR</p><h2>10 000 € / mois</h2><p>Chaque action enregistrée doit aider à générer du revenu, sécuriser les opérations ou augmenter la valeur de l'entreprise.</p></div>
-        <div class="milestone"><span>PROCHAINE ÉTAPE</span><strong>2 000 € d'épargne</strong><small>pour quitter Subway</small><div class="progress-line"><i id="savings-progress"></i></div><b id="savings-label">0 / 2 000 €</b></div>
-      </section>
+      <nav class="os-tabs" role="tablist" aria-label="Vues Business OS">
+        <button type="button" role="tab" data-tab="pilot" class="active" aria-selected="true">Piloter</button>
+        <button type="button" role="tab" data-tab="prospect" aria-selected="false">Prospecter</button>
+        <button type="button" role="tab" data-tab="system" aria-selected="false">Système</button>
+      </nav>
 
-      <section class="section-block"><div class="section-heading"><div><p class="eyebrow">TABLEAU DE BORD</p><h2>Les signaux qui comptent</h2></div><button class="small-button" data-open="settings-form">Modifier les objectifs</button></div>
-        <div class="metric-grid business-metrics">
-          <article class="metric-card accent"><div class="metric-top"><span>Valeur clients du mois</span><b>01</b></div><strong><span id="revenue-value">0</span><small> €</small></strong><div class="metric-bar"><i id="revenue-bar"></i></div><p>Objectif mensuel <span id="revenue-target-label">10 000 €</span></p></article>
-          <article class="metric-card"><div class="metric-top"><span>Pipeline estimé</span><b>02</b></div><strong><span id="pipeline-value">0</span><small> €</small></strong><div class="metric-bar"><i id="pipeline-bar"></i></div><p>Opportunités non signées</p></article>
-          <article class="metric-card"><div class="metric-top"><span>Épargne de sortie</span><b>03</b></div><strong><span id="savings-value">0</span><small> €</small></strong><div class="metric-bar"><i id="savings-bar"></i></div><p>Seuil Subway : <span id="savings-target-label">2 000 €</span></p></article>
-        </div>
-      </section>
+      <div data-panel="pilot">
+        <section class="business-intro">
+          <div><p class="eyebrow">NORTH STAR</p><h2>10 000 € / mois</h2><p>Chaque action enregistrée doit aider à générer du revenu, sécuriser les opérations ou augmenter la valeur de l'entreprise.</p></div>
+          <div class="milestone"><span>PROCHAINE ÉTAPE</span><strong>2 000 € d'épargne</strong><small>pour quitter Subway</small><div class="progress-line"><i id="savings-progress"></i></div><b id="savings-label">0 / 2 000 €</b></div>
+        </section>
 
-      <section class="section-block trend-section" aria-labelledby="trend-title"><div class="section-heading"><div><p class="eyebrow">TRAJECTOIRE · 30 JOURS</p><h2 id="trend-title">Est-ce que tu avances vraiment ?</h2></div><span class="sync-chip" id="sync-status">Connexion en cours…</span></div><div class="trend-grid"><article class="trend-card"><div><span>Sommeil</span><strong id="trend-sleep-summary">—</strong></div><div class="spark-bars" id="trend-sleep" aria-label="Tendance du sommeil sur 30 jours"><i></i><i></i><i></i><i></i><i></i><i></i></div></article><article class="trend-card"><div><span>Énergie</span><strong id="trend-energy-summary">—</strong></div><div class="spark-bars blue-bars" id="trend-energy" aria-label="Tendance de l'énergie sur 30 jours"><i></i><i></i><i></i><i></i><i></i><i></i></div></article><article class="trend-card"><div><span>Business</span><strong id="trend-business-summary">—</strong></div><div class="spark-bars green-bars" id="trend-business" aria-label="Tendance du temps business sur 30 jours"><i></i><i></i><i></i><i></i><i></i><i></i></div></article></div><p class="trend-note" id="trend-note">Les valeurs absentes restent non renseignées : elles ne sont pas transformées en zéro.</p></section>
+        <section class="section-block"><div class="section-heading"><div><p class="eyebrow">TABLEAU DE BORD</p><h2>Les signaux qui comptent</h2></div><button class="small-button" data-open="settings-form">Modifier les objectifs</button></div>
+          <div class="metric-grid business-metrics four-grid">
+            <article class="metric-card accent"><div class="metric-top"><span>Combien il manque ce mois</span><b>01</b></div><strong><span id="remaining-value">0</span><small> €</small></strong><div class="metric-bar"><i id="remaining-bar"></i></div><p id="remaining-note">Objectif 10 000 €</p></article>
+            <article class="metric-card"><div class="metric-top"><span>Valeur clients du mois</span><b>02</b></div><strong><span id="revenue-value">0</span><small> €</small></strong><div class="metric-bar"><i id="revenue-bar"></i></div><p>Signé, pas forcément encaissé — <span id="cash-collected-label">0 €</span> réellement reçus</p></article>
+            <article class="metric-card"><div class="metric-top"><span>Pipeline estimé</span><b>03</b></div><strong><span id="pipeline-value">0</span><small> €</small></strong><div class="metric-bar"><i id="pipeline-bar"></i></div><p>Opportunités non signées</p></article>
+            <article class="metric-card"><div class="metric-top"><span>Épargne de sortie</span><b>04</b></div><strong><span id="savings-value">0</span><small> €</small></strong><div class="metric-bar"><i id="savings-bar"></i></div><p>Seuil Subway : <span id="savings-target-label">2 000 €</span></p></article>
+          </div>
+        </section>
 
-      <section class="section-block funnel-section"><div class="section-heading"><div><p class="eyebrow">ACQUISITION → CONVERSION</p><h2>Ton tunnel commercial</h2></div><button class="small-button" data-open="client-form">+ Nouveau contact</button></div><div class="funnel-grid"><div class="funnel-step"><span>PROSPECTS</span><strong id="funnel-prospects">0</strong><small>contacts identifiés</small></div><div class="funnel-arrow">→</div><div class="funnel-step"><span>RDV / PROPOSITIONS</span><strong id="funnel-opportunities">0</strong><small>opportunités actives</small></div><div class="funnel-arrow">→</div><div class="funnel-step success-step"><span>CLIENTS SIGNÉS</span><strong id="funnel-clients">0</strong><small>relations ouvertes</small></div></div><div class="funnel-foot"><span>Taux de conversion connu : <b id="conversion-rate">—</b></span><span>Panier moyen signé : <b id="average-deal">—</b></span><span>Limite seul : <b>4 clients / mois</b></span></div></section>
+        <section class="section-block trend-section" aria-labelledby="trend-title"><div class="section-heading"><div><p class="eyebrow">TRAJECTOIRE · 30 JOURS</p><h2 id="trend-title">Est-ce que tu avances vraiment ?</h2></div><span class="sync-chip" id="sync-status">Connexion en cours…</span></div><div class="trend-grid"><article class="trend-card"><div><span>Sommeil</span><strong id="trend-sleep-summary">—</strong></div><div class="spark-bars" id="trend-sleep" aria-label="Tendance du sommeil sur 30 jours"><i></i><i></i><i></i><i></i><i></i><i></i></div></article><article class="trend-card"><div><span>Énergie</span><strong id="trend-energy-summary">—</strong></div><div class="spark-bars blue-bars" id="trend-energy" aria-label="Tendance de l'énergie sur 30 jours"><i></i><i></i><i></i><i></i><i></i><i></i></div></article><article class="trend-card"><div><span>Business</span><strong id="trend-business-summary">—</strong></div><div class="spark-bars green-bars" id="trend-business" aria-label="Tendance du temps business sur 30 jours"><i></i><i></i><i></i><i></i><i></i><i></i></div></article></div><p class="trend-note" id="trend-note">Les valeurs absentes restent non renseignées : elles ne sont pas transformées en zéro.</p></section>
 
-      <section class="section-block split-grid">
-        <div><div class="section-heading"><div><p class="eyebrow">PIPELINE</p><h2>Clients & opportunités</h2></div><button class="small-button" data-open="client-form">+ Ajouter</button></div><div class="list-panel" id="clients-list"><div class="blank-state"><span>01</span><strong>Ton premier client commence ici.</strong><p>Enregistre les opportunités dès le premier contact. Même un refus devient une donnée.</p></div></div></div>
-        <div><div class="section-heading"><div><p class="eyebrow">SYSTÈME</p><h2>Process documentés</h2></div><button class="small-button" data-open="process-form">+ Ajouter</button></div><div class="list-panel" id="process-list"><div class="blank-state"><span>02</span><strong>Chaque répétition peut devenir un process.</strong><p>Dis-le à Hermes sur Telegram, ou ajoute-le ici. Exemple : « mon process vidéo recrutement : je repère les annonces, j'appelle, je propose un devis, je tourne, je livre. »</p></div></div></div>
-      </section>
+        <section class="section-block" id="pipeline-compare">
+          <div class="section-heading"><div><p class="eyebrow">PIPELINE · DEUX LECTURES</p><h2>CRM nominatif vs volume réel</h2></div><button class="small-button" data-open="client-form">+ Nouveau contact</button></div>
+          <div class="compare-grid">
+            <article class="compare-col">
+              <p class="eyebrow">CRM NOMINATIF</p>
+              <div class="funnel-grid"><div class="funnel-step"><span>PROSPECTS</span><strong id="funnel-prospects">0</strong><small>contacts identifiés</small></div><div class="funnel-arrow">→</div><div class="funnel-step"><span>RDV / PROPOSITIONS</span><strong id="funnel-opportunities">0</strong><small>opportunités actives</small></div><div class="funnel-arrow">→</div><div class="funnel-step success-step"><span>CLIENTS SIGNÉS</span><strong id="funnel-clients">0</strong><small>relations ouvertes</small></div></div>
+              <div class="funnel-foot"><span>Taux connu : <b id="conversion-rate">—</b></span><span>Panier moyen : <b id="average-deal">—</b></span></div>
+            </article>
+            <article class="compare-col" id="pipeline-auto">
+              <p class="eyebrow">VOLUME HABIT-TRACK</p>
+              <span class="sync-chip" id="pipeline-auto-status">En attente…</span>
+              <div class="metric-grid business-metrics">
+                <article class="metric-card accent"><div class="metric-top"><span>Contacts 7 j</span><b>01</b></div><strong><span id="auto-contacts-7d">—</span></strong><div class="metric-bar"><i id="auto-contacts-bar"></i></div><p>Appels + visites notés</p></article>
+                <article class="metric-card"><div class="metric-top"><span>Conversion 7 j</span><b>02</b></div><strong><span id="auto-conversion-7d">—</span><small>%</small></strong><div class="metric-bar"><i id="auto-conversion-bar"></i></div><p id="auto-clients-7d">Clients signés sur la semaine</p></article>
+                <article class="metric-card"><div class="metric-top"><span>Conversion 28 j</span><b>03</b></div><strong><span id="auto-conversion-28d">—</span><small>%</small></strong><div class="metric-bar"><i id="auto-conversion-28d-bar"></i></div><p id="auto-clients-28d">Sur le mois glissant</p></article>
+              </div>
+            </article>
+          </div>
+          <p class="trend-note" id="pipeline-gap">Les deux pipelines se lisent l’un contre l’autre : le CRM nomme, habit-track compte le volume.</p>
+          <p class="trend-note" id="pipeline-auto-note" hidden></p>
+        </section>
 
-      <section class="section-block split-grid">
-        <div><div class="section-heading"><div><p class="eyebrow">SOURCES DE PROSPECTION</p><h2>D'où viennent les leads</h2></div><button class="small-button" data-open="source-form">+ Source</button></div><div class="list-panel" id="sources-list"><div class="blank-state"><span>S</span><strong>Aucune source configurée.</strong><p>Ajoute ta source Apify, LinkedIn, recommandations… pour tracker le volume et la qualité.</p></div></div></div>
-        <div><div class="section-heading"><div><p class="eyebrow">ACTIVITÉS DE PROSPECTION</p><h2>Appels, visites, relances</h2></div><button class="small-button" data-open="activity-form">+ Activité</button></div><div class="list-panel" id="activities-list"><div class="blank-state"><span>A</span><strong>Aucune activité enregistrée.</strong><p>Note chaque action : appel, visite, email. Le funnel se construit ici.</p></div></div></div>
-      </section>
+        <section class="section-block">
+          <div class="section-heading"><div><p class="eyebrow">PIPELINE</p><h2>Clients & opportunités</h2></div><button class="small-button" data-open="client-form">+ Ajouter</button></div>
+          <div class="list-panel" id="clients-list"><div class="blank-state"><span>01</span><strong>Ton premier client commence ici.</strong><p>Enregistre les opportunités dès le premier contact. Même un refus devient une donnée.</p></div></div>
+        </section>
+      </div>
 
-      <section class="section-block operating-grid">
-        <article class="operating-card"><p class="eyebrow">ACTIF INTANGIBLE</p><h3>Ce qui augmente la valeur</h3><ul><li><span>Clients satisfaits</span><b id="value-clients">0</b></li><li><span>Process transmissibles</span><b id="value-processes">0</b></li><li><span>Décisions capitalisées</span><b id="value-notes">0</b></li></ul></article>
-        <article class="operating-card dark-card"><p class="eyebrow">CADENCE DE PILOTAGE</p><h3>Ce que le système cherchera</h3><div class="signal-list"><div><i></i><span>Prospection → opportunités</span></div><div><i></i><span>Opportunités → clients</span></div><div><i></i><span>Clients → process</span></div><div><i></i><span>Process → délégation</span></div></div></article>
-        <article class="operating-card"><p class="eyebrow">PROCHAINE ACTION</p><h3 id="next-action-title">Documenter une première répétition</h3><p id="next-action-copy">Choisis une tâche que tu fais déjà deux fois par semaine et écris-la comme si quelqu'un devait la reprendre demain.</p><button class="text-button" data-open="process-form">Créer le process <span>→</span></button></article>
-      </section>
+      <div data-panel="prospect" hidden>
+        <section class="section-block split-grid">
+          <div><div class="section-heading"><div><p class="eyebrow">SOURCES DE PROSPECTION</p><h2>D'où viennent les leads</h2></div><button class="small-button" data-open="source-form">+ Source</button></div><div class="list-panel" id="sources-list"><div class="blank-state"><span>S</span><strong>Aucune source configurée.</strong><p>Ajoute ta source Apify, LinkedIn, recommandations… pour tracker le volume et la qualité.</p></div></div></div>
+          <div><div class="section-heading"><div><p class="eyebrow">ACTIVITÉS DE PROSPECTION</p><h2>Appels, visites, relances</h2></div><button class="small-button" data-open="activity-form">+ Activité</button></div><div class="list-panel" id="activities-list"><div class="blank-state"><span>A</span><strong>Aucune activité enregistrée.</strong><p>Note chaque action : appel, visite, email. Le funnel se construit ici.</p></div></div></div>
+        </section>
+      </div>
 
-      <section class="section-block connection-section" aria-labelledby="connection-title"><div class="section-heading"><div><p class="eyebrow">ARCHITECTURE RÉELLE</p><h2 id="connection-title">Connexions du système</h2></div><span class="date-chip">état actuel</span></div><div class="connection-grid"><article class="connection-card" id="connection-hermes"><i></i><div><strong>Hermes</strong><small>agent Telegram · relie tout le système</small></div></article><article class="connection-card" id="connection-supabase"><i></i><div><strong>Supabase</strong><small>vérification en cours</small></div></article><article class="connection-card" id="connection-lifeos"><i></i><div><strong>LifeOS</strong><small>saisie du matin</small></div></article><article class="connection-card local-only" id="connection-google"><i></i><div><strong>Gmail + Agenda</strong><small>connecté au Life-Analyzer sur Mac</small></div></article><article class="connection-card local-only" id="connection-activitywatch"><i></i><div><strong>ActivityWatch</strong><small>agrégats locaux sur Mac</small></div></article></div></section>
+      <div data-panel="system" hidden>
+        <section class="section-block">
+          <div class="section-heading"><div><p class="eyebrow">SYSTÈME</p><h2>Process documentés</h2></div><button class="small-button" data-open="process-form">+ Ajouter</button></div>
+          <div class="list-panel" id="process-list"><div class="blank-state"><span>02</span><strong>Chaque répétition peut devenir un process.</strong><p>Dis-le à Hermes sur Telegram, ou ajoute-le ici. Exemple : « mon process vidéo recrutement : je repère les annonces, j'appelle, je propose un devis, je tourne, je livre. »</p></div></div>
+        </section>
 
-      <section class="section-block integration-data" aria-labelledby="integration-data-title"><div class="section-heading"><div><p class="eyebrow">SIGNAUX CONNECTÉS</p><h2 id="integration-data-title">Emails, agenda & activité Mac</h2></div><span class="date-chip" id="integration-updated">en attente</span></div><div class="integration-data-grid"><article><span>GMAIL</span><strong id="gmail-business-count">—</strong><p>signaux business détectés</p><div id="gmail-signals" class="compact-list"><small>Aucune synchronisation.</small></div></article><article><span>AGENDA</span><strong id="calendar-today-count">—</strong><p>événements aujourd’hui</p><div id="calendar-events" class="compact-list"><small>Aucune synchronisation.</small></div></article><article><span>ACTIVITYWATCH</span><strong id="activity-active-hours">—</strong><p>temps actif aujourd’hui</p><div class="micro-stats"><span>contexte <b id="activity-switches">—</b></span><span>inactif <b id="activity-afk">—</b></span></div></article></div></section>
+        <section class="section-block operating-grid">
+          <article class="operating-card"><p class="eyebrow">ACTIF INTANGIBLE</p><h3>Ce qui augmente la valeur</h3><ul><li><span>Clients satisfaits</span><b id="value-clients">0</b></li><li><span>Process transmissibles</span><b id="value-processes">0</b></li><li><span>Décisions capitalisées</span><b id="value-notes">0</b></li></ul></article>
+          <article class="operating-card dark-card"><p class="eyebrow">CADENCE DE PILOTAGE</p><h3>Ce que le système cherchera</h3><div class="signal-list"><div><i></i><span>Prospection → opportunités</span></div><div><i></i><span>Opportunités → clients</span></div><div><i></i><span>Clients → process</span></div><div><i></i><span>Process → délégation</span></div></div></article>
+          <article class="operating-card"><p class="eyebrow">PROCHAINE ACTION</p><h3 id="next-action-title">Documenter une première répétition</h3><p id="next-action-copy">Choisis une tâche que tu fais déjà deux fois par semaine et écris-la comme si quelqu'un devait la reprendre demain.</p><button class="text-button" data-open="process-form">Créer le process <span>→</span></button></article>
+        </section>
 
-      <section class="section-block advice-section"><div class="section-heading"><div><p class="eyebrow">CONSEILS D'HERMES</p><h2>Ce que ton associé voit</h2></div><span class="live-label"><i class="live-dot"></i> Live</span></div><div class="advice-list" id="advice-list"><div class="blank-state"><span>04</span><strong>Aucun conseil enregistré.</strong><p>Écris <b>/conseil</b> à Hermes sur Telegram. Il lit tes données, te répond, puis enregistre le conseil ici.</p></div></div></section>
+        <section class="section-block connection-section" aria-labelledby="connection-title"><div class="section-heading"><div><p class="eyebrow">ARCHITECTURE RÉELLE</p><h2 id="connection-title">Connexions du système</h2></div><span class="date-chip">état actuel</span></div><div class="connection-grid"><article class="connection-card" id="connection-hermes"><i></i><div><strong>Hermes</strong><small>agent Telegram · relie tout le système</small></div></article><article class="connection-card" id="connection-supabase"><i></i><div><strong>Supabase</strong><small>vérification en cours</small></div></article><article class="connection-card" id="connection-lifeos"><i></i><div><strong>LifeOS</strong><small>saisie du matin</small></div></article><article class="connection-card local-only" id="connection-google"><i></i><div><strong>Gmail + Agenda</strong><small>connecté au Life-Analyzer sur Mac</small></div></article><article class="connection-card local-only" id="connection-activitywatch"><i></i><div><strong>ActivityWatch</strong><small>agrégats locaux sur Mac</small></div></article></div></section>
 
-      <section class="section-block journal-section"><div class="section-heading"><div><p class="eyebrow">MÉMOIRE OPÉRATIONNELLE</p><h2>Journal de progression</h2></div><button class="small-button" data-open="journal-form">+ Nouvelle note</button></div><div class="journal-list" id="journal-list"><div class="blank-state"><span>03</span><strong>Les décisions deviennent des actifs.</strong><p>Consigne les apprentissages, erreurs, décisions et améliorations de ton entreprise.</p></div></div></section>
+        <section class="section-block integration-data" aria-labelledby="integration-data-title"><div class="section-heading"><div><p class="eyebrow">SIGNAUX CONNECTÉS</p><h2 id="integration-data-title">Emails, agenda & activité Mac</h2></div><span class="date-chip" id="integration-updated">en attente</span></div><div class="integration-data-grid"><article><span>GMAIL</span><strong id="gmail-business-count">—</strong><p>signaux business détectés</p><div id="gmail-signals" class="compact-list"><small>Aucune synchronisation.</small></div></article><article><span>AGENDA</span><strong id="calendar-today-count">—</strong><p>événements aujourd’hui</p><div id="calendar-events" class="compact-list"><small>Aucune synchronisation.</small></div></article><article><span>ACTIVITYWATCH</span><strong id="activity-active-hours">—</strong><p>temps actif aujourd’hui</p><div class="micro-stats"><span>contexte <b id="activity-switches">—</b></span><span>inactif <b id="activity-afk">—</b></span></div></article></div></section>
 
-      <section class="architecture-note"><div class="architecture-number">∞</div><div><p class="eyebrow">VISION</p><h3>Hermes relie tes actions à un actif transmissible.</h3><p>Hermes est l’agent : il lit LifeOS, le site, Gmail, l’agenda et ActivityWatch, te parle sur Telegram, puis réécrit la mémoire (conseils, contacts, process, journal). Life-Analyzer prépare les agrégats. Le site affiche. Toi, tu vis et tu saisis.</p></div></section>
+        <section class="section-block advice-section"><div class="section-heading"><div><p class="eyebrow">CONSEILS D'HERMES</p><h2>Ce que ton associé voit</h2></div><span class="live-label"><i class="live-dot"></i> Live</span></div><div class="advice-list" id="advice-list"><div class="blank-state"><span>04</span><strong>Aucun conseil enregistré.</strong><p>Écris <b>/conseil</b> à Hermes sur Telegram. Il lit tes données, te répond, puis enregistre le conseil ici.</p></div></div></section>
+
+        <section class="section-block journal-section"><div class="section-heading"><div><p class="eyebrow">MÉMOIRE OPÉRATIONNELLE</p><h2>Journal de progression</h2></div><button class="small-button" data-open="journal-form">+ Nouvelle note</button></div><div class="journal-list" id="journal-list"><div class="blank-state"><span>03</span><strong>Les décisions deviennent des actifs.</strong><p>Consigne les apprentissages, erreurs, décisions et améliorations de ton entreprise.</p></div></div></section>
+
+        <section class="architecture-note"><div class="architecture-number">∞</div><div><p class="eyebrow">VISION</p><h3>Hermes relie tes actions à un actif transmissible.</h3><p>Hermes est l’agent : il lit LifeOS, le site, Gmail, l’agenda et ActivityWatch, te parle sur Telegram, puis réécrit la mémoire (conseils, contacts, process, journal). Life-Analyzer prépare les agrégats. Le site affiche. Toi, tu vis et tu saisis.</p></div></section>
+      </div>
+
       <footer><span>lifeos / business os</span><span>Les données sont privées et exportables.</span></footer>
     </main>
   </div>
 
   <dialog id="entry-dialog"><form method="dialog" id="entry-form"><div class="dialog-head"><div><p class="eyebrow" id="dialog-kicker">NOUVELLE ENTRÉE</p><h2 id="dialog-title">Ajouter</h2></div><button value="cancel" class="dialog-close" aria-label="Fermer">×</button></div><div id="dialog-fields"></div><div class="dialog-actions"><button value="cancel" class="ghost-button">Annuler</button><button value="default" class="primary-button">Enregistrer</button></div></form></dialog>
   <script src="business.js"></script>
+  <script src="motion.js"></script>
 </body>
 </html>

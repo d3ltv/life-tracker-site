@@ -37,8 +37,62 @@
       $('trend-energy-summary').textContent = energyAvg === null ? 'non renseignée' : `${energyAvg.toFixed(1).replace('.', ',')} / 10`;
       $('trend-business-summary').textContent = business.some(x => x !== null && x !== undefined) ? `${Math.round(businessTotal)} min` : 'non renseigné';
       $('trend-note').textContent = `${trends.length} jours disponibles · les absences restent non renseignées.`;
+      renderPipelineAuto(data.pipeline || data.insights?.pipeline || null);
+      renderPipelineGap();
     } catch (error) {
       $('trend-note').textContent = 'Tendances temporairement indisponibles.';
+      if ($('pipeline-auto-status')) $('pipeline-auto-status').textContent = 'Indisponible';
+    }
+  }
+
+  function renderPipelineAuto(pipeline) {
+    state.pipelineAuto = pipeline || null;
+    const status = $('pipeline-auto-status');
+    if (!pipeline) {
+      if (status) status.textContent = 'Pas encore de data habit-track';
+      renderPipelineGap();
+      return;
+    }
+    if (status) status.textContent = 'Sync habit-track';
+    const set = (id, text) => { if ($(id)) $(id).textContent = text; };
+    const bar = (id, value, max) => {
+      const el = $(id);
+      if (!el) return;
+      el.style.width = value != null && max ? `${Math.min(100, Math.max(0, Number(value) / max * 100))}%` : '0%';
+    };
+    set('auto-contacts-7d', pipeline.contacts7d ?? '—');
+    set('auto-conversion-7d', pipeline.conversionPct7d == null ? '—' : String(pipeline.conversionPct7d).replace('.', ','));
+    set('auto-conversion-28d', pipeline.conversionPct28d == null ? '—' : String(pipeline.conversionPct28d).replace('.', ','));
+    set('auto-clients-7d', `${pipeline.clients7d ?? 0} client(s) / ${pipeline.contacts7d ?? 0} contact(s)`);
+    set('auto-clients-28d', `${pipeline.clients28d ?? 0} client(s) / ${pipeline.contacts28d ?? 0} contact(s)`);
+    bar('auto-contacts-bar', pipeline.contacts7d, 40);
+    bar('auto-conversion-bar', pipeline.conversionPct7d, 40);
+    bar('auto-conversion-28d-bar', pipeline.conversionPct28d, 40);
+    const note = $('pipeline-auto-note');
+    if (note) {
+      const sameDay = pipeline.conversionPctJourJ == null ? '' : ` · conversion jour J ${String(pipeline.conversionPctJourJ).replace('.', ',')}%`;
+      note.textContent = `Alimenté par habit-track · ${pipeline.joursMesures || 0} jours mesurés${sameDay}.`;
+    }
+    renderPipelineGap();
+  }
+
+  function renderPipelineGap() {
+    const note = $('pipeline-gap');
+    if (!note) return;
+    const pipeline = state.pipelineAuto;
+    const contacts = [...(state.prospects || []), ...(state.clients || [])];
+    const crmProspects = contacts.filter((item) => item.status === 'prospect').length;
+    const autoContacts = pipeline?.contacts7d;
+    if (autoContacts == null) {
+      note.textContent = 'Les deux pipelines se lisent l’un contre l’autre : le CRM nomme, habit-track compte le volume.';
+      return;
+    }
+    if (Number(autoContacts) > crmProspects) {
+      note.textContent = `Écart : habit-track a noté ${autoContacts} contact(s) en 7 j, le CRM n’en liste que ${crmProspects}. Le nominatif sous-déclare.`;
+    } else if (crmProspects > Number(autoContacts)) {
+      note.textContent = `Le CRM a ${crmProspects} prospect(s) ; habit-track en a compté ${autoContacts} cette semaine.`;
+    } else {
+      note.textContent = `Les deux sources s’alignent (${autoContacts} contact(s) cette semaine).`;
     }
   }
 
@@ -66,17 +120,24 @@
         ...item,
         value: item.value ?? 0,
         nextAction: item.next_action ?? item.nextAction ?? '',
+        nextActionAt: item.next_action_at ?? item.nextActionAt ?? null,
         note: item.note ?? ''
       }));
       state.prospects = [];
       state.processes = remote.processes || [];
       if (remote.metrics) {
         state.revenue = Number(remote.metrics.signedValueMonth || 0);
+        state.metrics = {
+          cashCollectedMonth: remote.metrics.cashCollectedMonth ?? 0,
+          remainingToTarget: remote.metrics.remainingToTarget ?? null,
+          dealsRemaining: remote.metrics.dealsRemaining ?? null
+        };
       }
       if (remote.settings) {
         state.settings = {
           revenueTarget: Number(remote.settings.revenue_target ?? 10000),
-          savingsTarget: Number(remote.settings.savings_target ?? 2000)
+          savingsTarget: Number(remote.settings.savings_target ?? 2000),
+          pricePerDeal: remote.settings.price_per_deal ?? null
         };
         state.savings = Number(remote.settings.savings ?? 0);
       }
@@ -207,6 +268,17 @@
     $('revenue-value').textContent = Number(state.revenue || 0).toLocaleString('fr-FR');
     $('revenue-target-label').textContent = `${Number(settings.revenueTarget).toLocaleString('fr-FR')} €`;
     $('savings-target-label').textContent = `${Number(settings.savingsTarget).toLocaleString('fr-FR')} €`;
+    const metrics = state.metrics || {};
+    const remaining = metrics.remainingToTarget != null ? Number(metrics.remainingToTarget) : Math.max(0, Number(settings.revenueTarget) - Number(state.revenue || 0));
+    $('remaining-value').textContent = remaining.toLocaleString('fr-FR');
+    if ($('remaining-bar')) $('remaining-bar').style.width = `${Number(settings.revenueTarget) > 0 ? Math.min(100, Number(state.revenue || 0) / Number(settings.revenueTarget) * 100) : 0}%`;
+    const pricePerDeal = settings.pricePerDeal;
+    if ($('remaining-note')) {
+      $('remaining-note').innerHTML = pricePerDeal
+        ? `À ${Number(pricePerDeal).toLocaleString('fr-FR')} € / offre, il faut encore <b>${metrics.dealsRemaining ?? Math.ceil(remaining / pricePerDeal)}</b> client(s).`
+        : `Prix d'offre non encore fixé par Hermes · objectif ${Number(settings.revenueTarget).toLocaleString('fr-FR')} €`;
+    }
+    if ($('cash-collected-label')) $('cash-collected-label').textContent = `${Number(metrics.cashCollectedMonth || 0).toLocaleString('fr-FR')} €`;
     $('pipeline-value').textContent = pipeline.toLocaleString('fr-FR');
     $('funnel-prospects').textContent = prospects.filter(x => x.status === 'prospect').length;
     $('funnel-opportunities').textContent = opportunities.length;
@@ -233,11 +305,36 @@
     $('pipeline-bar').style.width = `${progress(pipeline, Number(settings.revenueTarget))}%`;
     if ($('prospects-bar')) $('prospects-bar').style.width = `${Math.min(100, prospects.length * 10)}%`;
     if ($('clients-bar')) $('clients-bar').style.width = `${Math.min(100, clients.length * 20)}%`;
-    const next = active.find(x => x.nextAction);
-    if (next) { $('next-action-title').textContent = next.nextAction; $('next-action-copy').textContent = `${next.name} · ${next.status}`; }
-    renderList('clients-list', state.clients, 'Aucun client ou prospect enregistré.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.name)}</div><div class="entry-meta">${esc(x.note || '')}</div></div><span class="entry-tag">${esc(x.status)}</span></div>`);
+    const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date());
+    const dated = active
+      .filter((item) => item.nextAction || item.next_action)
+      .sort((a, b) => String(a.nextActionAt || a.next_action_at || '9999-12-31').localeCompare(String(b.nextActionAt || b.next_action_at || '9999-12-31')));
+    const next = dated[0];
+    if (next) {
+      $('next-action-title').textContent = next.nextAction || next.next_action;
+      const due = next.nextActionAt || next.next_action_at;
+      $('next-action-copy').textContent = `${next.name} · ${next.status}${due ? ` · ${due}` : ''}`;
+    }
+    const sortedClients = state.clients.slice().sort((a, b) => {
+      const da = a.nextActionAt || a.next_action_at || '';
+      const db = b.nextActionAt || b.next_action_at || '';
+      if (da && !db) return -1;
+      if (!da && db) return 1;
+      if (da !== db) return String(da).localeCompare(String(db));
+      return 0;
+    });
+    renderList('clients-list', sortedClients, 'Aucun client ou prospect enregistré.', (x) => {
+      const due = x.nextActionAt || x.next_action_at;
+      const overdue = due && due < todayKey;
+      const action = x.nextAction || x.next_action || x.note || '';
+      const paymentStatus = x.payment_status || 'du';
+      const paymentLabel = paymentStatus === 'encaisse' ? 'encaissé' : paymentStatus === 'facture' ? 'facturé' : 'dû';
+      const paymentTag = x.status === 'client' ? `<span class="payment-tag" data-status="${esc(paymentStatus)}">${esc(paymentLabel)}</span>` : '';
+      return `<div class="entry-row ${overdue ? 'is-overdue' : ''}"><div><div class="entry-title">${esc(x.name)} ${paymentTag}</div><div class="entry-meta">${esc(action)}${due ? ` · ${esc(due)}` : ''}</div></div><span class="entry-tag">${esc(due || x.status)}</span></div>`;
+    }, false);
     renderList('process-list', state.processes, 'Aucun process documenté.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.title)}</div><div class="entry-meta">${esc(x.description || '')}</div></div><span class="entry-tag">${esc(x.source === 'hermes' ? 'hermes' : 'process')}</span></div>`);
     renderList('journal-list', state.journal, 'Aucune note dans le journal.', (x) => `<div class="entry-row"><div><div class="entry-title">${esc(x.title)}</div><div class="entry-meta">${esc(x.body)}</div></div><span class="entry-tag">${esc(x.date)}</span></div>`, false);
+    renderPipelineGap();
   }
   function renderList(id, items, empty, template, reverse = true) {
     const el = $(id);
@@ -248,10 +345,10 @@
     el.innerHTML = ordered.length ? ordered.map(template).join('') : `<div class="blank-state"><span>—</span><strong>${empty}</strong><p>${hint}</p></div>`;
   }
   function fields(type) {
-      if(type==='client') return `<div class="field"><label>Nom / entreprise</label><input name="name" required placeholder="Ex. Premier client"></div><div class="field"><label>Statut</label><select name="status"><option>prospect</option><option>rdv</option><option>proposition</option><option>client</option><option>perdu</option></select></div><div class="field"><label>Valeur potentielle (€)</label><input name="value" type="number" min="0" placeholder="Ex. 600"></div><div class="field"><label>Prochaine action / échéance</label><input name="nextAction" placeholder="Ex. Relancer vendredi"></div><div class="field"><label>Note</label><textarea name="note" placeholder="Besoin, offre, contexte..."></textarea></div>`;
+      if(type==='client') return `<div class="field"><label>Nom / entreprise</label><input name="name" required placeholder="Ex. Premier client"></div><div class="field"><label>Statut</label><select name="status"><option>prospect</option><option>rdv</option><option>proposition</option><option>client</option><option>perdu</option></select></div><div class="field"><label>Valeur potentielle (€)</label><input name="value" type="number" min="0" placeholder="Ex. 600"></div><div class="field"><label>Prochaine action</label><input name="nextAction" placeholder="Ex. Relancer vendredi"></div><div class="field"><label>Échéance</label><input name="nextActionAt" type="date"></div><div class="field"><label>Encaissement</label><select name="paymentStatus"><option value="du">Dû (rien reçu)</option><option value="facture">Facturé</option><option value="encaisse">Encaissé</option></select></div><div class="field"><label>Montant encaissé (€)</label><input name="paidAmount" type="number" min="0" placeholder="Ex. 800"></div><div class="field"><label>Note</label><textarea name="note" placeholder="Besoin, offre, contexte..."></textarea></div>`;
       if(type==='source') return `<div class="field"><label>Nom de la source</label><input name="name" required placeholder="Ex. Apify Industrie Tours"></div><div class="field"><label>Type</label><select name="type"><option value="apify">Apify (scraping annonces)</option><option value="linkedin">LinkedIn</option><option value="referral">Recommandation</option><option value="cold">Cold outreach</option><option value="autre">Autre</option></select></div><div class="field"><label>Config (JSON)</label><textarea name="config" placeholder='{"secteur": "industrie", "ville": "Tours", "sites": ["france-travail", "indeed", "hellowork"]}'></textarea></div>`;
       if(type==='activity') return `<div class="field"><label>Date (YYYY-MM-DD)</label><input name="date" type="date" required></div><div class="field"><label>Source</label><select name="source_id"><option value="">— Aucune —</option>${(state.sources || []).map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></div><div class="field"><label>Contact (optionnel)</label><select name="contact_id"><option value="">— Aucun —</option>${(state.clients || []).map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></div><div class="field"><label>Canal</label><select name="channel"><option value="appel">Appel</option><option value="visite">Visite physique</option><option value="email">Email</option><option value="linkedin">LinkedIn</option><option value="sms">SMS</option><option value="autre">Autre</option></select></div><div class="field"><label>Résultat</label><select name="outcome"><option value="pas_de_reponse">Pas de réponse</option><option value="refus">Refus</option><option value="rdv">RDV obtenu</option><option value="devis_envoye">Devis envoyé</option><option value="signe">Signé</option><option value="perdu">Perdu</option><option value="a_relancer">À relancer</option></select></div><div class="field"><label>Durée (min)</label><input name="duration_min" type="number" min="0" placeholder="Ex. 15"></div><div class="field"><label>Note</label><textarea name="note" placeholder="Contexte, objection, prochaine étape..."></textarea></div>`;
-      if(type==='settings') return `<div class="field"><label>Objectif CA mensuel (€)</label><input name="revenueTarget" type="number" min="0" value="${state.settings?.revenueTarget || 10000}" required></div><div class="field"><label>Objectif épargne (€)</label><input name="savingsTarget" type="number" min="0" value="${state.settings?.savingsTarget || 2000}" required></div><div class="field"><label>Épargne actuelle (€)</label><input name="savings" type="number" min="0" value="${state.savings || 0}" required></div>`
+      if(type==='settings') return `<div class="field"><label>Objectif CA mensuel (€)</label><input name="revenueTarget" type="number" min="0" value="${state.settings?.revenueTarget || 10000}" required></div><div class="field"><label>Objectif épargne (€)</label><input name="savingsTarget" type="number" min="0" value="${state.settings?.savingsTarget || 2000}" required></div><div class="field"><label>Épargne actuelle (€)</label><input name="savings" type="number" min="0" value="${state.savings || 0}" required></div><div class="field"><label>Prix réel d'une offre (€) — laisse vide si pas encore tranché</label><input name="pricePerDeal" type="number" min="0" placeholder="Ex. 800" value="${state.settings?.pricePerDeal ?? ''}"></div>`
       if(type==='process') return `<div class="field"><label>Nom du process</label><input name="title" required placeholder="Ex. Onboarding client"></div><div class="field"><label>Étapes / description</label><textarea name="description" required placeholder="1. ...\n2. ...\n3. ..."></textarea></div>`;
       return `<div class="field"><label>Titre</label><input name="title" required placeholder="Décision, apprentissage ou erreur"></div><div class="field"><label>Contenu</label><textarea name="body" required placeholder="Ce qui s'est passé, ce que j'ai appris, ce que je change..."></textarea></div>`;
   }
@@ -262,13 +359,21 @@
     const data = Object.fromEntries(new FormData(e.target));
     try {
       if (activeType === 'settings') {
-        const response = await api('/business/settings', { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ revenueTarget: Number(data.revenueTarget), savingsTarget: Number(data.savingsTarget), savings: Number(data.savings) }) });
+        const pricePerDeal = data.pricePerDeal === '' || data.pricePerDeal === undefined ? null : Number(data.pricePerDeal);
+        const revenueTarget = Number(data.revenueTarget);
+        const response = await api('/business/settings', { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ revenueTarget, savingsTarget: Number(data.savingsTarget), savings: Number(data.savings), pricePerDeal }) });
         if (!response.ok) throw new Error(`API ${response.status}`);
-        state.settings = { revenueTarget: Number(data.revenueTarget), savingsTarget: Number(data.savingsTarget) };
+        state.settings = { revenueTarget, savingsTarget: Number(data.savingsTarget), pricePerDeal };
         state.savings = Number(data.savings);
+        const remainingToTarget = Math.max(0, revenueTarget - Number(state.revenue || 0));
+        state.metrics = {
+          ...state.metrics,
+          remainingToTarget,
+          dealsRemaining: pricePerDeal ? Math.ceil(remainingToTarget / pricePerDeal) : null
+        };
       }
       if (activeType === 'client') {
-        const response = await api('/business/contact', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: data.name, status: data.status, value: Number(data.value || 0), nextAction: data.nextAction, note: data.note, source: 'web' }) });
+        const response = await api('/business/contact', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: data.name, status: data.status, value: Number(data.value || 0), nextAction: data.nextAction, nextActionAt: data.nextActionAt || null, note: data.note, source: 'web', paymentStatus: data.paymentStatus || 'du', paidAmount: Number(data.paidAmount || 0), paidAt: data.paymentStatus === 'encaisse' ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date()) : null }) });
         if (!response.ok) throw new Error(`API ${response.status}`);
         const result = await response.json();
         state.clients.push(result.contact || data);
@@ -341,6 +446,25 @@
   loadIntegrations();
   loadSources();
   loadActivities();
+  const activateTab = (tab) => {
+    document.querySelectorAll('[data-tab]').forEach((button) => {
+      const active = button.dataset.tab === tab;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', String(active));
+    });
+    document.querySelectorAll('[data-panel]').forEach((panel) => {
+      panel.hidden = panel.dataset.panel !== tab;
+    });
+  };
+  document.querySelectorAll('[data-tab]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const tab = button.dataset.tab;
+      activateTab(tab);
+      history.replaceState(null, '', `#${tab}`);
+    });
+  });
+  const initialTab = (location.hash || '').replace('#', '');
+  if (['pilot', 'prospect', 'system'].includes(initialTab)) activateTab(initialTab);
   $('export-button').addEventListener('click', () => { const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`lifeos-business-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(a.href); });
   render();
 })();

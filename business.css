@@ -18,10 +18,13 @@ body {
   grid-template-columns: 1fr;
   gap: 18px;
   padding: clamp(22px, 5vw, 34px);
-  background: var(--ink);
+  background: var(--glass-dark);
+  border: 1px solid var(--glass-dark-stroke);
   color: #fff;
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: var(--glass-dark-shadow);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   min-width: 0;
 }
 
@@ -115,6 +118,69 @@ body {
   grid-template-columns: 1fr;
 }
 
+.os-tabs {
+  display: flex;
+  gap: 4px;
+  margin: -8px 0 28px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.34);
+  border: 1px solid var(--glass-stroke);
+  border-radius: 100px;
+  width: fit-content;
+  max-width: 100%;
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+}
+
+.os-tabs button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.os-tabs button.active {
+  background: var(--glass-bg-strong);
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+[data-panel][hidden] {
+  display: none !important;
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  min-width: 0;
+}
+
+.compare-col {
+  min-width: 0;
+}
+
+.compare-col > .eyebrow {
+  margin-bottom: 12px;
+}
+
+.compare-col .sync-chip {
+  margin-bottom: 12px;
+}
+
+.entry-row.is-overdue {
+  background: #fdecea;
+}
+
+.entry-row.is-overdue .entry-tag {
+  color: var(--red);
+}
+
 .split-grid,
 .operating-grid,
 .funnel-grid,
@@ -133,10 +199,12 @@ body {
 .list-panel,
 .journal-list,
 .advice-list {
-  background: var(--white);
-  border: 0;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-stroke);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   overflow: hidden;
   min-height: 178px;
   min-width: 0;
@@ -250,9 +318,12 @@ body {
   align-items: flex-start;
   gap: 12px;
   padding: clamp(20px, 4vw, 28px);
-  background: var(--white);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-stroke);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   margin-top: var(--section-gap, 56px);
   min-width: 0;
 }
@@ -281,11 +352,13 @@ dialog {
   width: min(440px, calc(100% - 32px));
   max-width: calc(100vw - 24px);
   padding: 0;
-  border: 0;
+  border: 1px solid var(--glass-stroke);
   border-radius: 18px;
-  background: var(--white);
+  background: var(--glass-bg-strong);
   color: var(--ink);
   box-shadow: 0 25px 100px rgba(0, 0, 0, 0.25);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
 }
 
 dialog::backdrop {
@@ -382,10 +455,13 @@ dialog::backdrop {
 }
 
 .operating-card {
-  background: var(--white);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-stroke);
   border-radius: var(--radius);
   padding: clamp(18px, 4vw, 24px);
-  box-shadow: var(--shadow);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   min-height: 206px;
   min-width: 0;
 }
@@ -423,7 +499,9 @@ dialog::backdrop {
 }
 
 .dark-card {
-  background: var(--ink);
+  background: var(--glass-dark);
+  border-color: var(--glass-dark-stroke);
+  box-shadow: var(--glass-dark-shadow);
   color: #fff;
 }
 
@@ -485,9 +563,12 @@ dialog::backdrop {
 
 .funnel-step {
   padding: clamp(18px, 4vw, 22px) clamp(14px, 3vw, 18px);
-  background: var(--white);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-stroke);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   min-width: 0;
 }
 
@@ -510,7 +591,7 @@ dialog::backdrop {
 }
 
 .success-step {
-  background: #f0f8eb;
+  background: rgba(240, 248, 235, 0.55);
 }
 
 .success-step strong {
@@ -545,9 +626,12 @@ dialog::backdrop {
   align-items: end;
   gap: 14px;
   padding: clamp(18px, 4vw, 22px);
-  background: var(--white);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-stroke);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   min-height: 130px;
   min-width: 0;
 }
@@ -624,9 +708,11 @@ dialog::backdrop {
   align-items: center;
   gap: 10px;
   padding: 16px;
-  background: var(--white);
+  background: var(--glass-bg);
   border-radius: 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-stroke);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
   min-width: 0;
 }
 
@@ -671,9 +757,12 @@ dialog::backdrop {
 
 .integration-data-grid > article {
   padding: clamp(18px, 4vw, 22px);
-  background: var(--white);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-stroke);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   min-height: 180px;
   min-width: 0;
 }
@@ -784,9 +873,28 @@ dialog::backdrop {
     gap: 15px;
   }
 
+  .business-metrics.four-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .compare-col .business-metrics,
+  .compare-col .funnel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .compare-col .funnel-arrow {
+    transform: rotate(90deg);
+  }
+
   .split-grid {
     grid-template-columns: 1fr 1fr;
     gap: 40px;
+  }
+
+  .compare-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    align-items: start;
   }
 
   .funnel-grid {
@@ -811,6 +919,42 @@ dialog::backdrop {
     grid-template-columns: repeat(5, 1fr);
     gap: 10px;
   }
+
+  .business-metrics.four-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.metric-card .metric-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.payment-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.payment-tag[data-status="du"] {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.payment-tag[data-status="facture"] {
+  background: rgba(255, 186, 73, 0.16);
+  color: #ffba49;
+}
+
+.payment-tag[data-status="encaisse"] {
+  background: rgba(84, 214, 138, 0.16);
+  color: #54d68a;
 }
 
 @media (prefers-reduced-motion: reduce) {

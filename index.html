@@ -13,9 +13,10 @@
       <a class="brand" href="#top" aria-label="LifeOS accueil"><span class="brand-mark">L</span><span><strong>lifeos</strong><small>personal intelligence</small></span></a>
       <nav class="nav" aria-label="Navigation principale">
         <a class="nav-item active" href="#overview"><span>◒</span> Vue d'ensemble</a>
-        <a class="nav-item" href="#vital-signals"><span>⌁</span> Signaux vitaux</a>
+        <a class="nav-item" href="#vital-signals"><span>⌁</span> Signaux</a>
+        <a class="nav-item" href="#pattern"><span>▃</span> 28 jours</a>
+        <a class="nav-item" href="#engine"><span>◎</span> Moteur</a>
         <a class="nav-item" href="#nutrition"><span>⌗</span> Nutrition</a>
-        <a class="nav-item" href="#business"><span>↗</span> Business</a>
         <a class="nav-item" href="/business"><span>⌂</span> Business OS</a>
       </nav>
       <div class="sidebar-note"><span class="live-dot"></span><div><strong>Suivi actif</strong><small id="connection-label">Synchronisation en cours</small></div></div>
@@ -23,35 +24,212 @@
     </aside>
 
     <main class="content" id="top">
-      <header class="topbar"><div><p class="eyebrow" id="date-label">AUJOURD'HUI</p><h1>Ta journée, <em>en clair.</em></h1><p class="page-subtitle">Ton énergie, ton temps et ton avancée vers la liberté.</p></div><div class="top-actions"><button class="icon-button" id="refresh-button" aria-label="Actualiser les données" title="Actualiser">↻</button><div class="avatar">M</div></div></header>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="date-label">AUJOURD'HUI</p>
+          <h1>Ta journée, <em>en clair.</em></h1>
+          <p class="page-subtitle">Le signal du jour d’abord. La série ensuite, pour voir si c’est un pic ou une tendance.</p>
+        </div>
+        <div class="top-actions">
+          <div class="period-toggle" role="tablist" aria-label="Période">
+            <button type="button" role="tab" data-period="day" class="active" aria-selected="true">Jour</button>
+            <button type="button" role="tab" data-period="week" aria-selected="false">Semaine</button>
+            <button type="button" role="tab" data-period="month" aria-selected="false">Mois</button>
+          </div>
+          <button class="icon-button" id="refresh-button" aria-label="Actualiser les données" title="Actualiser">↻</button>
+        </div>
+      </header>
 
       <section class="hero-grid" id="overview">
-        <article class="hero-card"><div class="section-kicker">NORTH STAR · AVANCEMENT BUSINESS</div><div class="hero-main"><div><span class="hero-number" id="business-hours">—</span><span class="hero-unit"> h business</span></div><p id="business-caption">Les heures de prospection et de delivery sont la métrique qui compte le plus pour ton objectif 10K€/mois.</p></div><div class="hero-footer"><span class="status-pill"><i></i> <span id="lifeos-status">LifeOS connecté</span></span><span id="data-coverage">Données en cours</span></div></article>
-        <article class="goal-card"><div class="section-kicker light-kicker">ÉTAT DU JOUR</div><div class="score-ring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle class="score-track" cx="50" cy="50" r="42"/><circle class="score-value" id="score-ring" cx="50" cy="50" r="42"/></svg><strong id="performance-score">—</strong><span>/100</span></div><div><strong>Performance LifeOS</strong><p id="performance-caption">Score calculé à partir de tes données renseignées.</p></div></article>
+        <article class="hero-card" id="hero-card">
+          <div class="section-kicker" id="hero-kicker">SIGNAL DU JOUR</div>
+          <div class="hero-main">
+            <strong class="hero-title" id="today-insight">Analyse en cours…</strong>
+            <p id="today-insight-detail">Le moteur relie tes actions à tes ambitions.</p>
+          </div>
+          <div class="hero-footer">
+            <span class="status-pill"><i></i> <span id="lifeos-status">LifeOS connecté</span></span>
+            <span id="data-coverage">Données en cours</span>
+          </div>
+        </article>
+        <article class="goal-card">
+          <div class="section-kicker light-kicker">ÉTAT DU JOUR</div>
+          <div class="score-ring">
+            <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="score-track" cx="50" cy="50" r="42"/><circle class="score-value" id="score-ring" cx="50" cy="50" r="42"/></svg>
+            <strong id="performance-score">—</strong><span>/100</span>
+          </div>
+          <div>
+            <strong>Performance LifeOS</strong>
+            <p id="performance-caption">Score calculé à partir de tes données renseignées.</p>
+          </div>
+        </article>
       </section>
 
-      <section class="section-block" id="vital-signals"><div class="section-heading"><div><p class="eyebrow">CORPS · ÉNERGIE · CLARTÉ</p><h2>Les signaux qui pilotent ta journée</h2></div><span class="date-chip" id="signal-date">—</span></div><div class="metric-grid four-grid">
-        <article class="metric-card"><div class="metric-top"><span>Sommeil</span><b>01</b></div><strong><span id="sleep-value">—</span><small id="sleep-unit"></small></strong><div class="metric-bar"><i id="sleep-bar"></i></div><p>Objectif <span>8 h</span></p></article>
-        <article class="metric-card"><div class="metric-top"><span>Sport</span><b>02</b></div><strong><span id="sport-value">—</span><small id="sport-unit"></small></strong><div class="metric-bar"><i id="sport-bar"></i></div><p>Objectif <span>34 min aujourd'hui</span></p></article>
-        <article class="metric-card"><div class="metric-top"><span>Humeur</span><b>03</b></div><strong><span id="mood-value">—</span><small>/10</small></strong><div class="metric-bar"><i id="mood-bar"></i></div><p>Ressenti déclaré</p></article>
-        <article class="metric-card"><div class="metric-top"><span>Énergie</span><b>04</b></div><strong><span id="energy-value">—</span><small>/10</small></strong><div class="metric-bar"><i id="energy-bar"></i></div><p>Carburant du deep work</p></article>
-      </div></section>
+      <section class="section-block" id="vital-signals">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">CORPS · ÉNERGIE · AVANCÉE</p>
+            <h2>Les 5 signaux qui comptent</h2>
+          </div>
+          <span class="date-chip" id="signal-date">—</span>
+        </div>
+        <div class="metric-grid five-grid">
+          <article class="metric-card" id="card-sleep"><div class="metric-top"><span>Sommeil</span><b>01</b></div><strong><span id="sleep-value">—</span><small id="sleep-unit"></small></strong><div class="metric-bar"><i id="sleep-bar"></i></div><p id="sleep-caption">Objectif 8 h</p></article>
+          <article class="metric-card" id="card-sport"><div class="metric-top"><span>Sport</span><b>02</b></div><strong><span id="sport-value">—</span><small id="sport-unit"></small></strong><div class="metric-bar"><i id="sport-bar"></i></div><p id="sport-caption">Objectif 34 min</p></article>
+          <article class="metric-card" id="card-mood"><div class="metric-top"><span>Humeur</span><b>03</b></div><strong><span id="mood-value">—</span><small>/10</small></strong><div class="metric-bar"><i id="mood-bar"></i></div><p id="mood-caption">Moyenne du jour</p><p class="metric-week" id="mood-week">Semaine —</p></article>
+          <article class="metric-card" id="card-energy"><div class="metric-top"><span>Énergie</span><b>04</b></div><strong><span id="energy-value">—</span><small>/10</small></strong><div class="metric-bar"><i id="energy-bar"></i></div><p id="energy-caption">Moyenne du jour</p><p class="metric-week" id="energy-week">Semaine —</p></article>
+          <article class="metric-card" id="card-business"><div class="metric-top"><span>Business</span><b>05</b></div><strong><span id="business-hours">—</span><small id="business-hours-unit"></small></strong><div class="metric-bar"><i id="business-hours-bar"></i></div><p id="business-caption">Prospection du jour</p></article>
+        </div>
+      </section>
 
-      <section class="section-block insight-strip"><div class="insight-item"><span class="insight-icon">↗</span><div><p class="eyebrow">SIGNAL D'AUJOURD'HUI</p><strong id="today-insight">Analyse en cours...</strong><p id="today-insight-detail">Le moteur relie tes actions à tes ambitions.</p></div></div><div class="insight-item"><span class="insight-icon blue">◎</span><div><p class="eyebrow">STRESS</p><strong id="stress-value">—</strong><p id="stress-detail">Aucune donnée renseignée</p></div></div></section>
+      <section class="section-block" id="pattern">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">28 JOURS · PAS UN PIC ISOLÉ</p>
+            <h2>La série, pas la photo du jour</h2>
+          </div>
+          <span class="date-chip" id="pattern-chip">—</span>
+        </div>
+        <p class="pattern-reading" id="pattern-reading">Pas encore assez de jours pour une lecture.</p>
+        <article class="pattern-panel">
+          <div class="pattern-legend" id="pattern-legend"></div>
+          <div class="pattern-chart" id="pattern-chart" role="img" aria-label="Courbes sommeil, énergie et minutes business sur 28 jours"></div>
+        </article>
+        <div class="pattern-split">
+          <article class="pattern-panel">
+            <p class="eyebrow">ÉNERGIE · LUNDI → DIMANCHE</p>
+            <div class="weekday-bars" id="weekday-bars"></div>
+          </article>
+          <article class="pattern-panel">
+            <p class="eyebrow">12 SEMAINES</p>
+            <div class="cal-wrap">
+              <div class="cal-months" id="cal-months"></div>
+              <div class="cal-body">
+                <div class="cal-dows" aria-hidden="true"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+                <div class="cal-grid" id="cal-grid"></div>
+              </div>
+            </div>
+            <p class="section-footnote" id="cal-caption">Plus c’est foncé, plus le jour est noté. Une case vide n’est pas un zéro — c’est un trou.</p>
+          </article>
+        </div>
+      </section>
 
-      <section class="section-block" id="nutrition"><div class="section-heading"><div><p class="eyebrow">ALIMENTATION</p><h2>Équilibre nutritionnel</h2></div><span class="live-label"><i class="live-dot"></i> Hermes</span></div><div class="metric-grid four-grid"><article class="metric-card accent"><div class="metric-top"><span>Protéines</span><b>01</b></div><strong><span id="protein-today">—</span><small> g</small></strong><div class="metric-bar"><i id="protein-bar"></i></div><p>Estimées par Hermes, sans photo</p></article><article class="metric-card"><div class="metric-top"><span>Glucides</span><b>02</b></div><strong><span id="carbs-today">—</span><small> g</small></strong><div class="metric-bar"><i id="carbs-bar"></i></div><p>Macros du jour</p></article><article class="metric-card"><div class="metric-top"><span>Lipides</span><b>03</b></div><strong><span id="fat-today">—</span><small> g</small></strong><div class="metric-bar"><i id="fat-bar"></i></div><p>Jamais d'image, seulement les chiffres</p></article><article class="metric-card"><div class="metric-top"><span>Calories</span><b>04</b></div><strong><span id="cals-today">—</span><small> kcal</small></strong><div class="metric-bar"><i id="calories-bar"></i></div><p>Estimation journalière</p></article></div></section>
+      <section class="section-block" id="engine">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">MOTEUR · 12 CARTES MAX</p>
+            <h2>Ce que le moteur observe</h2>
+          </div>
+          <span class="live-label"><i class="live-dot"></i> Trié par pertinence</span>
+        </div>
+        <div class="engine-list" id="engine-cards">
+          <div class="empty-state"><span>◎</span><strong>Pas encore assez d’historique</strong><p>Les cartes apparaissent dès que 3 jours sont notés.</p></div>
+        </div>
+      </section>
 
-      <section class="section-block" id="business"><div class="section-heading"><div><p class="eyebrow">NORTH STAR · 10K / MOIS</p><h2>Avancée business</h2></div><a class="section-link" href="/business">Ouvrir Business OS →</a></div><div class="business-grid"><article class="business-card"><span class="business-label">PROSPECTION</span><strong id="prospecting-value">—</strong><p>minutes aujourd'hui</p><div class="mini-stats"><span>appels <b id="calls-value">—</b></span><span>physique <b id="physical-value">—</b></span></div></article><article class="business-card"><span class="business-label">CLIENTS</span><strong id="clients-value">—</strong><p>nouveau(x) aujourd'hui</p><div class="mini-stats"><span>pipeline <b id="contacts-value">—</b></span><span>objectif <b>10K€/mois</b></span></div></article><article class="business-card dark-business"><span class="business-label">VERDICT DU MOTEUR</span><strong id="business-verdict">—</strong><p id="business-verdict-detail">En attente de données business.</p><a href="/business">Documenter une action →</a></article></div></section>
+      <details class="fold" id="fold-sleep-debt">
+        <summary>
+          <div><p class="eyebrow">RÉCUPÉRATION</p><h2>Dette de sommeil</h2></div>
+          <span class="date-chip" id="sleep-debt-regime">—</span>
+        </summary>
+        <div class="metric-grid four-grid" id="sleep-debt">
+          <article class="metric-card" id="card-sleep-debt"><div class="metric-top"><span>Dette cumulée</span><b>01</b></div><strong><span id="sleep-debt-hours">—</span><small id="sleep-debt-unit"></small></strong><div class="metric-bar"><i id="sleep-debt-bar"></i></div><p id="sleep-debt-trend">Tendance non renseignée</p></article>
+          <article class="metric-card"><div class="metric-top"><span>Plan</span><b>02</b></div><strong><span id="sleep-debt-plan">—</span><small id="sleep-debt-plan-unit"></small></strong><div class="metric-bar"><i id="sleep-debt-plan-bar"></i></div><p id="sleep-debt-plan-detail">Minutes en plus par nuit</p></article>
+          <article class="metric-card"><div class="metric-top"><span>Coucher</span><b>03</b></div><strong><span id="sleep-start">—</span></strong><div class="metric-bar"><i id="sleep-start-bar"></i></div><p>Heure notée dans LifeOS</p></article>
+          <article class="metric-card"><div class="metric-top"><span>Réveil</span><b>04</b></div><strong><span id="sleep-end">—</span></strong><div class="metric-bar"><i id="sleep-end-bar"></i></div><p>Heure notée dans LifeOS</p></article>
+        </div>
+        <p class="section-footnote" id="sleep-debt-copy">Le manque s’accumule nuit après nuit. Une seule grosse nuit ne rembourse pas.</p>
+      </details>
 
-      <section class="section-block" id="history"><div class="section-heading"><div><p class="eyebrow">ALIMENTATION · JOURNÉE</p><h2>Tes repas</h2></div><span class="live-label"><i class="live-dot"></i> Live</span></div><div class="meal-list" id="history-list"><div class="empty-state"><span>○</span><strong>Aucun repas pour le moment</strong><p>Envoie une photo à Hermes. Seuls le nom et les macros apparaissent ici, jamais l'image.</p></div></div></section>
+      <details class="fold" id="fold-feel">
+        <summary>
+          <div><p class="eyebrow">RESSENTI · CRÉNEAUX</p><h2>Matin, après-midi, soir</h2></div>
+          <span class="live-label" id="stress-chip">Stress —</span>
+        </summary>
+        <div class="metric-grid four-grid" id="feel-slots-grid">
+          <article class="metric-card"><div class="metric-top"><span>Matin</span><b>01</b></div><strong><span id="feel-morning-mood">—</span><small>/10</small></strong><div class="metric-bar"><i id="feel-morning-bar"></i></div><p id="feel-morning-detail">Humeur · énergie</p></article>
+          <article class="metric-card"><div class="metric-top"><span>Après-midi</span><b>02</b></div><strong><span id="feel-afternoon-mood">—</span><small>/10</small></strong><div class="metric-bar"><i id="feel-afternoon-bar"></i></div><p id="feel-afternoon-detail">Humeur · énergie</p></article>
+          <article class="metric-card"><div class="metric-top"><span>Soir</span><b>03</b></div><strong><span id="feel-evening-mood">—</span><small>/10</small></strong><div class="metric-bar"><i id="feel-evening-bar"></i></div><p id="feel-evening-detail">Humeur · énergie</p></article>
+          <article class="metric-card" id="card-stress"><div class="metric-top"><span>Stress</span><b>04</b></div><strong><span id="stress-value">—</span></strong><div class="metric-bar"><i id="stress-bar"></i></div><p id="stress-detail">Aucune donnée renseignée</p><p class="metric-week" id="stress-week">Semaine —</p></article>
+        </div>
+      </details>
 
-      <section class="section-block journal-card" id="journal"><div class="section-heading"><div><p class="eyebrow">DONNÉE LIBRE · MÉMOIRE</p><h2>Quelque chose d’imprévu ?</h2></div><span class="date-chip">Aujourd'hui</span></div><div class="journal-compose"><div class="journal-symbol">✎</div><div class="journal-copy"><strong>Ajoute ce que les cases ne prévoient pas.</strong><p>Une séance précise, une décision, un blocage, un achat, un événement ou une idée business. Le moteur pourra s’en servir dans ses prochaines analyses.</p><textarea id="journal-input" rows="3" placeholder="Ex. J’ai eu un doute après un échange client, puis j’ai décidé de revoir mon offre..."></textarea><div class="journal-actions"><button class="journal-save" id="journal-save">Enregistrer dans mon journal</button><span id="journal-status">Privé · enregistré sur cet appareil</span></div></div></div><div class="journal-entries" id="journal-entries"></div></section>
+      <details class="fold" id="fold-nutrition">
+        <summary>
+          <div><p class="eyebrow">ALIMENTATION</p><h2>Macros et repas</h2></div>
+          <span class="live-label"><i class="live-dot"></i> Hermes</span>
+        </summary>
+        <div class="metric-grid four-grid" id="nutrition">
+          <article class="metric-card"><div class="metric-top"><span>Protéines</span><b>01</b></div><strong><span id="protein-today">—</span><small> g</small></strong><div class="metric-bar"><i id="protein-bar"></i></div><p>Estimées par Hermes</p></article>
+          <article class="metric-card"><div class="metric-top"><span>Glucides</span><b>02</b></div><strong><span id="carbs-today">—</span><small> g</small></strong><div class="metric-bar"><i id="carbs-bar"></i></div><p>Macros du jour</p></article>
+          <article class="metric-card"><div class="metric-top"><span>Lipides</span><b>03</b></div><strong><span id="fat-today">—</span><small> g</small></strong><div class="metric-bar"><i id="fat-bar"></i></div><p>Chiffres seulement</p></article>
+          <article class="metric-card"><div class="metric-top"><span>Calories</span><b>04</b></div><strong><span id="cals-today">—</span><small> kcal</small></strong><div class="metric-bar"><i id="calories-bar"></i></div><p>Estimation journalière</p></article>
+        </div>
+        <div class="meal-list" id="history-list">
+          <div class="empty-state"><span>○</span><strong>Aucun repas pour le moment</strong><p>Envoie une photo à Hermes. Seuls le nom et les macros apparaissent ici, jamais l'image.</p></div>
+        </div>
+      </details>
 
-      <section class="section-block sources-panel"><div><p class="eyebrow">SOURCES CONNECTÉES</p><h2>Le système grandit avec toi</h2></div><div class="source-list"><div><i class="source-ok"></i><span>LifeOS</span><small>habitudes, humeur, énergie, objectifs</small></div><div><i class="source-ok"></i><span>Hermes</span><small>agent Telegram · conseils, repas, suivi</small></div><div><i class="source-ok"></i><span>Gmail + Agenda</span><small id="google-source-status">lecture seule · signaux à analyser</small></div><div><i class="source-pending"></i><span>ActivityWatch</span><small id="activitywatch-source-status">agrégats Mac à synchroniser</small></div><div><i class="source-pending"></i><span>Screen Time</span><small id="screen-source-status">export réel à connecter</small></div></div></section>
-      <section class="telegram-callout"><div class="telegram-icon">↗</div><div><p class="eyebrow">L'AGENT</p><h3>Hermes te parle. Le reste s'enregistre.</h3><p>Sur Telegram, Hermes lit tes données, te conseille, pose les questions manquantes et écrit sur le site. Une photo de repas suffit.</p></div><a href="https://t.me/lifeos22_bot" target="_blank" rel="noreferrer">Ouvrir Telegram <span>→</span></a></section>
+      <details class="fold" id="fold-business" open>
+        <summary>
+          <div><p class="eyebrow">NORTH STAR · 10K / MOIS</p><h2>Avancée business</h2></div>
+          <a class="section-link" href="/business">Ouvrir Business OS →</a>
+        </summary>
+        <div class="business-grid" id="business">
+          <article class="business-card"><span class="business-label">PROSPECTION</span><strong id="prospecting-value">—</strong><p id="prospecting-caption">minutes aujourd'hui</p><div class="mini-stats"><span>appels <b id="calls-value">—</b></span><span>physique <b id="physical-value">—</b></span><span>messages <b id="messages-value">—</b></span></div></article>
+          <article class="business-card"><span class="business-label">PIPELINE DU JOUR</span><strong id="clients-value">—</strong><p>nouveau(x) client(s)</p><div class="mini-stats"><span>contacts <b id="contacts-value">—</b></span><span>RDV <b id="meetings-value">—</b></span><span>CA <b id="revenue-value">—</b></span></div></article>
+          <article class="business-card dark-business"><span class="business-label">PROCHAINES ACTIONS</span><strong id="business-verdict">—</strong><p id="business-verdict-detail">En attente de données business.</p><div id="next-actions-list"></div><a href="/business">Ouvrir le CRM →</a></article>
+        </div>
+      </details>
+
+      <details class="fold journal-card" id="fold-journal">
+        <summary>
+          <div><p class="eyebrow">DONNÉE LIBRE · MÉMOIRE</p><h2>Quelque chose d’imprévu ?</h2></div>
+          <span class="date-chip">Aujourd'hui</span>
+        </summary>
+        <div class="journal-compose" id="journal">
+          <div class="journal-symbol">✎</div>
+          <div class="journal-copy">
+            <strong>Ajoute ce que les cases ne prévoient pas.</strong>
+            <p>Une séance précise, une décision, un blocage, un achat, un événement ou une idée business. Le moteur pourra s’en servir dans ses prochaines analyses.</p>
+            <textarea id="journal-input" rows="3" placeholder="Ex. J’ai eu un doute après un échange client, puis j’ai décidé de revoir mon offre..."></textarea>
+            <div class="journal-actions">
+              <button class="journal-save" id="journal-save">Enregistrer dans mon journal</button>
+              <span id="journal-status">Privé · enregistré sur cet appareil</span>
+            </div>
+          </div>
+        </div>
+        <div class="journal-entries" id="journal-entries"></div>
+      </details>
+
+      <details class="fold" id="fold-sources">
+        <summary>
+          <div><p class="eyebrow">SOURCES CONNECTÉES</p><h2>Le système grandit avec toi</h2></div>
+        </summary>
+        <div class="sources-panel">
+          <div class="source-list">
+            <div><i class="source-ok"></i><span>LifeOS</span><small>habitudes, humeur, énergie, objectifs</small></div>
+            <div><i class="source-ok"></i><span>Hermes</span><small>agent Telegram · conseils, repas, suivi</small></div>
+            <div><i class="source-ok"></i><span>Gmail + Agenda</span><small id="google-source-status">lecture seule · signaux à analyser</small></div>
+            <div><i class="source-pending"></i><span>ActivityWatch</span><small id="activitywatch-source-status">agrégats Mac à synchroniser</small></div>
+            <div><i class="source-pending"></i><span>Screen Time</span><small id="screen-source-status">export réel à connecter</small></div>
+          </div>
+        </div>
+      </details>
+
+      <section class="telegram-callout">
+        <div class="telegram-icon">↗</div>
+        <div>
+          <p class="eyebrow">L'AGENT</p>
+          <h3>Hermes te parle. Le reste s'enregistre.</h3>
+          <p>Sur Telegram, Hermes lit tes données, te conseille, pose les questions manquantes et écrit sur le site. Une photo de repas suffit.</p>
+        </div>
+        <a href="https://t.me/lifeos22_bot" target="_blank" rel="noreferrer">Ouvrir Telegram <span>→</span></a>
+      </section>
       <footer><span>lifeos / personal intelligence</span><span>Les données absentes sont affichées comme non renseignées.</span></footer>
     </main>
   </div>
   <script src="scripts.js"></script>
+  <script src="motion.js"></script>
 </body>
 </html>
