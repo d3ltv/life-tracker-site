@@ -11,9 +11,14 @@ const integrationStore = require('./integration_store');
 const { pickLifeosDay, normalizeIaDay, normalizeInsights } = require('./lifeos_sync');
 const lifeosDayStore = require('./lifeos_day_store');
 const { syncBusinessFromLifeosDay } = require('./lifeos_business_sync');
+const hermesStatus = require('./hermes_status');
 const app = express();
 const port = process.env.PORT || 3000;
 const publicOrigin = process.env.PUBLIC_ORIGIN || 'https://life-tracker-site.vercel.app';
+const dashboardOrigins = String(process.env.DASHBOARD_ORIGINS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
 const isoDate = /^\d{4}-\d{2}-\d{2}$/;
 
 function safeError(res, status, message, error) {
@@ -28,10 +33,17 @@ let journalEntries = initialState.journalEntries;
 let adviceEntries = initialState.adviceEntries;
 
 app.use(cors({ origin(origin, callback) {
-    if (!origin || origin === publicOrigin || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
+    if (!origin || origin === publicOrigin || dashboardOrigins.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+    }
+    // Dashboard de visibilité Hermès déployé sur Vercel (projet séparé).
+    try {
+        const host = new URL(origin).hostname;
+        if (host.endsWith('.vercel.app')) return callback(null, true);
+    } catch (_) { /* ignore */ }
     return callback(new Error('Origin refusée'));
 } }));
-app.use(express.json());
+app.use(express.json({ limit: '256kb' }));
 
 // Vercel peut transmettre le préfixe /api à Express après le rewrite.
 // On le retire pour que les routes Express restent identiques en local et en production.
@@ -51,6 +63,32 @@ app.get('/', (req, res) => {
 
 app.get('/status', (req, res) => {
     res.json({ online: true, agent: 'hermes', channel: 'telegram' });
+});
+
+// Heartbeat Hermès (Mac → site). Aucun secret dans le payload ; push protégé par INTEGRATION_SYNC_SECRET.
+app.post('/hermes/heartbeat', async (req, res) => {
+    if (!hasSyncAccess(req)) return res.status(401).json({ error: 'Non autorisé' });
+    try {
+        const saved = await hermesStatus.upsert(req.body || {});
+        return res.json({ success: true, collected_at: saved.collected_at, storage: saved._storage });
+    } catch (error) {
+        return safeError(res, 502, 'Heartbeat Hermès impossible', error);
+    }
+});
+
+app.get('/hermes/status', async (req, res) => {
+    try {
+        const latest = await hermesStatus.latest();
+        if (!latest) return res.status(404).json({ error: 'Aucun heartbeat Hermès', hint: 'Lance scripts/collect_status.py --push sur le Mac' });
+        const ageSec = latest.collected_at ? Math.max(0, Math.round((Date.now() - Date.parse(latest.collected_at)) / 1000)) : null;
+        return res.json({
+            ...latest,
+            fresh: hermesStatus.isFresh(latest),
+            age_sec: ageSec
+        });
+    } catch (error) {
+        return safeError(res, 502, 'Lecture heartbeat Hermès impossible', error);
+    }
 });
 
 function todayInParis() {
@@ -465,6 +503,10 @@ app.get('/business/state', async (req, res) => {
             const calendar = integrations.calendar || {};
             const activitywatch = integrations.activitywatch || {};
             const settingsRow = settings?.[0] || null;
+            const heartbeat = await hermesStatus.latest().catch(() => null);
+            const hermesOnline = heartbeat
+                ? Boolean(hermesStatus.isFresh(heartbeat, 900) && heartbeat.gateway?.running && heartbeat.gateway?.pid_alive !== false)
+                : true;
             return res.json({
                 source: 'supabase',
                 contacts: contacts || [],
@@ -478,11 +520,17 @@ app.get('/business/state', async (req, res) => {
                 connections: {
                     supabase: true,
                     lifeos: true,
-                    hermes: true,
-                    telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN),
+                    hermes: hermesOnline,
+                    telegram: Boolean(heartbeat?.telegram?.state === 'connected' || process.env.TELEGRAM_BOT_TOKEN),
                     google: isConnected(gmail) || isConnected(calendar),
                     activitywatch: isConnected(activitywatch)
-                }
+                },
+                hermes: heartbeat ? {
+                    fresh: hermesStatus.isFresh(heartbeat, 900),
+                    collected_at: heartbeat.collected_at,
+                    model: heartbeat.model || null,
+                    gateway: heartbeat.gateway || null
+                } : null
             });
         }
         return res.json({ source: 'local', contacts: [], processes: [], settings: null, sources: [] });
